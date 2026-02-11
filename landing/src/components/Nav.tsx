@@ -6,7 +6,7 @@ export function Nav() {
       <div className="max-w-[1060px] mx-auto w-full flex items-center justify-between">
         <a href="/" className="flex items-center gap-2.5 font-semibold text-[15px] text-cc-fg no-underline">
           <ClawdLogo size={28} />
-          <span className="font-condensed text-xl tracking-wide">The Companion</span>
+          <span className="font-condensed text-xl tracking-wide">Vibe Coder Companion</span>
         </a>
         <div className="flex items-center gap-5 sm:gap-6">
           <a

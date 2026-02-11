@@ -63,6 +63,58 @@
   }
 }
 
+@keyframes eyeMoveLeft {
+  0%,
+  14%,
+  100% {
+    transform: translateX(0) scaleY(1);
+  }
+  18% {
+    transform: translateX(-0.45px) scaleY(1);
+  }
+  24% {
+    transform: translateX(0.45px) scaleY(1);
+  }
+  30% {
+    transform: translateX(0) scaleY(0.7);
+  }
+  33% {
+    transform: translateX(0) scaleY(1);
+  }
+  62% {
+    transform: translateX(0.35px) scaleY(1);
+  }
+  69% {
+    transform: translateX(-0.25px) scaleY(1);
+  }
+}
+
+@keyframes eyeMoveRight {
+  0%,
+  14%,
+  100% {
+    transform: translateX(0) scaleY(1);
+  }
+  18% {
+    transform: translateX(0.45px) scaleY(1);
+  }
+  24% {
+    transform: translateX(-0.45px) scaleY(1);
+  }
+  30% {
+    transform: translateX(0) scaleY(0.7);
+  }
+  33% {
+    transform: translateX(0) scaleY(1);
+  }
+  62% {
+    transform: translateX(-0.35px) scaleY(1);
+  }
+  69% {
+    transform: translateX(0.25px) scaleY(1);
+  }
+}
+
 .animate-float {
   animation: float 3s ease-in-out infinite;
 }
@@ -114,6 +166,27 @@
   line-height: 1;
   color: var(--color-cc-muted);
   font-family: "Azeret Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.clawd-eye {
+  transform-origin: center;
+  transform-box: fill-box;
+  will-change: transform;
+}
+
+.clawd-eye-left {
+  animation: eyeMoveLeft 3.8s steps(2, end) infinite;
+}
+
+.clawd-eye-right {
+  animation: eyeMoveRight 3.8s steps(2, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clawd-eye-left,
+  .clawd-eye-right {
+    animation: none;
+  }
 }
 
 body {
