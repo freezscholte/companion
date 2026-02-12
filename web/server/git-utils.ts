@@ -371,7 +371,7 @@ export function gitPush(
   branch: string,
 ): { success: boolean; output: string } {
   try {
-    const output = git(`push -u origin ${branch}`, cwd);
+    const output = git(`push -u origin -- ${JSON.stringify(branch)}`, cwd);
     return { success: true, output };
   } catch (e: unknown) {
     return { success: false, output: e instanceof Error ? e.message : String(e) };
