@@ -228,6 +228,64 @@ describe("handleMessage: assistant", () => {
     expect(state.streaming.has("s1")).toBe(false);
     expect(state.sessionStatus.get("s1")).toBe("running");
   });
+
+  it("tracks changed files using session cwd for relative tool paths", () => {
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+
+    fireMessage({
+      type: "assistant",
+      message: {
+        id: "msg-tool-1",
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-4-20250514",
+        content: [
+          {
+            type: "tool_use",
+            id: "tool-1",
+            name: "Edit",
+            input: { file_path: "web/server/index.ts" },
+          },
+        ],
+        stop_reason: "tool_use",
+        usage: { input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+      },
+      parent_tool_use_id: null,
+    });
+
+    const changed = useStore.getState().changedFiles.get("s1");
+    expect(changed?.has("/home/user/web/server/index.ts")).toBe(true);
+  });
+
+  it("tracks changed files with absolute paths unchanged", () => {
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+
+    fireMessage({
+      type: "assistant",
+      message: {
+        id: "msg-tool-2",
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-4-20250514",
+        content: [
+          {
+            type: "tool_use",
+            id: "tool-2",
+            name: "Write",
+            input: { file_path: "/Users/test/.claude/plans/example.md" },
+          },
+        ],
+        stop_reason: "tool_use",
+        usage: { input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+      },
+      parent_tool_use_id: null,
+    });
+
+    const changed = useStore.getState().changedFiles.get("s1");
+    expect(changed?.has("/Users/test/.claude/plans/example.md")).toBe(true);
+  });
 });
 
 // ===========================================================================
