@@ -410,7 +410,15 @@ describe("launch", () => {
     // When a `node` binary exists next to the resolved `codex`, the launcher
     // should invoke `node <codex-script>` directly instead of relying on
     // the #!/usr/bin/env node shebang (which may resolve to system Node v12).
-    mockResolveBinary.mockReturnValue("/usr/bin/codex");
+    // Create a temp dir with both `codex` and `node` files to simulate nvm layout.
+    const tmpBinDir = mkdtempSync(join(tmpdir(), "codex-test-"));
+    const fakeCodex = join(tmpBinDir, "codex");
+    const fakeNode = join(tmpBinDir, "node");
+    const { writeFileSync: realWriteFileSync } = require("node:fs");
+    realWriteFileSync(fakeCodex, "#!/usr/bin/env node\n");
+    realWriteFileSync(fakeNode, "#!/bin/sh\n");
+
+    mockResolveBinary.mockReturnValue(fakeCodex);
     mockSpawn.mockReturnValueOnce(createMockCodexProc());
 
     launcher.launch({
@@ -420,11 +428,14 @@ describe("launch", () => {
     });
 
     const [cmdAndArgs] = mockSpawn.mock.calls[0];
-    // /usr/bin/node exists on this system, so it should use explicit node
-    expect(cmdAndArgs[0]).toBe("/usr/bin/node");
-    // The codex script path (possibly resolved via realpath) should be arg 1
+    // Sibling node exists, so it should use explicit node invocation
+    expect(cmdAndArgs[0]).toBe(fakeNode);
+    // The codex script path should be arg 1
     expect(cmdAndArgs[1]).toContain("codex");
     expect(cmdAndArgs).toContain("app-server");
+
+    // Cleanup
+    rmSync(tmpBinDir, { recursive: true, force: true });
   });
 
   it("sets state=exited and exitCode=127 when codex binary not found", () => {
