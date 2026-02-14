@@ -20,6 +20,7 @@ interface MockStoreState {
   taskPanelOpen: boolean;
   setTaskPanelOpen: ReturnType<typeof vi.fn>;
   prStatus: Map<string, { available: boolean; pr?: unknown } | null>;
+  pluginInsights: Map<string, { id: string; title: string; message: string; level: "info" | "success" | "warning" | "error"; timestamp: number }[]>;
 }
 
 let mockState: MockStoreState;
@@ -32,6 +33,7 @@ function resetStore(overrides: Partial<MockStoreState> = {}) {
     taskPanelOpen: true,
     setTaskPanelOpen: vi.fn(),
     prStatus: new Map(),
+    pluginInsights: new Map(),
     ...overrides,
   };
 }

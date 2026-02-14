@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import type { SessionState, PermissionRequest, ChatMessage, SdkSessionInfo, TaskItem, McpServerDetail } from "./types.js";
-import type { UpdateInfo, PRStatusResponse } from "./api.js";
+import type { SessionState, PermissionRequest, ChatMessage, SdkSessionInfo, TaskItem, McpServerDetail, PluginInsight } from "./types.js";
+import type { UpdateInfo, PRStatusResponse, PluginRuntimeInfo } from "./api.js";
 
 interface AppState {
   // Sessions
@@ -47,6 +47,12 @@ interface AppState {
 
   // MCP servers per session
   mcpServers: Map<string, McpServerDetail[]>;
+
+  // Plugin insights per session
+  pluginInsights: Map<string, PluginInsight[]>;
+
+  // Plugin catalog/config
+  plugins: PluginRuntimeInfo[];
 
   // Sidebar project grouping
   collapsedProjects: Set<string>;
@@ -113,6 +119,11 @@ interface AppState {
 
   // MCP actions
   setMcpServers: (sessionId: string, servers: McpServerDetail[]) => void;
+
+  // Plugin actions
+  addPluginInsight: (sessionId: string, insight: PluginInsight) => void;
+  clearPluginInsights: (sessionId: string) => void;
+  setPlugins: (plugins: PluginRuntimeInfo[]) => void;
 
   // Sidebar project grouping actions
   toggleProjectCollapse: (projectKey: string) => void;
@@ -216,6 +227,8 @@ export const useStore = create<AppState>((set) => ({
   recentlyRenamed: new Set(),
   prStatus: new Map(),
   mcpServers: new Map(),
+  pluginInsights: new Map(),
+  plugins: [],
   collapsedProjects: getInitialCollapsedProjects(),
   updateInfo: null,
   updateDismissedVersion: getInitialDismissedVersion(),
@@ -328,6 +341,8 @@ export const useStore = create<AppState>((set) => ({
       diffPanelSelectedFile.delete(sessionId);
       const mcpServers = new Map(s.mcpServers);
       mcpServers.delete(sessionId);
+      const pluginInsights = new Map(s.pluginInsights);
+      pluginInsights.delete(sessionId);
       const prStatus = new Map(s.prStatus);
       prStatus.delete(sessionId);
       localStorage.setItem("cc-session-names", JSON.stringify(Array.from(sessionNames.entries())));
@@ -351,6 +366,7 @@ export const useStore = create<AppState>((set) => ({
         recentlyRenamed,
         diffPanelSelectedFile,
         mcpServers,
+        pluginInsights,
         prStatus,
         sdkSessions: s.sdkSessions.filter((sdk) => sdk.sessionId !== sessionId),
         currentSessionId: s.currentSessionId === sessionId ? null : s.currentSessionId,
@@ -518,6 +534,25 @@ export const useStore = create<AppState>((set) => ({
       return { mcpServers };
     }),
 
+  addPluginInsight: (sessionId, insight) =>
+    set((s) => {
+      const pluginInsights = new Map(s.pluginInsights);
+      const list = [...(pluginInsights.get(sessionId) || []), insight];
+      // Keep panel light and bounded.
+      if (list.length > 100) list.splice(0, list.length - 100);
+      pluginInsights.set(sessionId, list);
+      return { pluginInsights };
+    }),
+
+  clearPluginInsights: (sessionId) =>
+    set((s) => {
+      const pluginInsights = new Map(s.pluginInsights);
+      pluginInsights.delete(sessionId);
+      return { pluginInsights };
+    }),
+
+  setPlugins: (plugins) => set({ plugins }),
+
   toggleProjectCollapse: (projectKey) =>
     set((s) => {
       const collapsedProjects = new Set(s.collapsedProjects);
@@ -602,6 +637,8 @@ export const useStore = create<AppState>((set) => ({
       sessionNames: new Map(),
       recentlyRenamed: new Set(),
       mcpServers: new Map(),
+      pluginInsights: new Map(),
+      plugins: [],
       prStatus: new Map(),
       activeTab: "chat" as const,
       diffPanelSelectedFile: new Map(),

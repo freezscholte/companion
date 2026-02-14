@@ -23,6 +23,7 @@ import {
   setUpdateInProgress,
 } from "./update-checker.js";
 import { refreshServiceDefinition } from "./service.js";
+import { PluginConfigValidationError, type PluginManager } from "./plugins/manager.js";
 
 const UPDATE_CHECK_STALE_MS = 5 * 60 * 1000;
 
@@ -75,6 +76,7 @@ export function createRoutes(
   worktreeTracker: WorktreeTracker,
   terminalManager: TerminalManager,
   prPoller?: import("./pr-poller.js").PRPoller,
+  pluginManager?: PluginManager,
 ) {
   const api = new Hono();
 
@@ -209,6 +211,22 @@ export function createRoutes(
         });
       }
 
+      if (pluginManager) {
+        const bridgeSession = wsBridge.getOrCreateSession(session.sessionId, backend);
+        await pluginManager.emit({
+          name: "session.created",
+          meta: {
+            eventId: crypto.randomUUID(),
+            eventVersion: 2,
+            timestamp: Date.now(),
+            source: "routes",
+            sessionId: bridgeSession.id,
+            backendType: bridgeSession.backendType,
+          },
+          data: { session: bridgeSession.state },
+        });
+      }
+
       return c.json(session);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -264,6 +282,19 @@ export function createRoutes(
 
     // Clean up container if any
     containerManager.removeContainer(id);
+    if (killed && pluginManager) {
+      await pluginManager.emit({
+        name: "session.killed",
+        meta: {
+          eventId: crypto.randomUUID(),
+          eventVersion: 2,
+          timestamp: Date.now(),
+          source: "routes",
+          sessionId: id,
+        },
+        data: { sessionId: id },
+      });
+    }
 
     return c.json({ ok: true });
   });
@@ -288,6 +319,19 @@ export function createRoutes(
     prPoller?.unwatch(id);
     launcher.removeSession(id);
     wsBridge.closeSession(id);
+    if (pluginManager) {
+      await pluginManager.emit({
+        name: "session.deleted",
+        meta: {
+          eventId: crypto.randomUUID(),
+          eventVersion: 2,
+          timestamp: Date.now(),
+          source: "routes",
+          sessionId: id,
+        },
+        data: { sessionId: id },
+      });
+    }
     return c.json({ ok: true, worktree: worktreeResult });
   });
 
@@ -307,7 +351,60 @@ export function createRoutes(
 
     launcher.setArchived(id, true);
     sessionStore.setArchived(id, true);
+    if (pluginManager) {
+      await pluginManager.emit({
+        name: "session.archived",
+        meta: {
+          eventId: crypto.randomUUID(),
+          eventVersion: 2,
+          timestamp: Date.now(),
+          source: "routes",
+          sessionId: id,
+        },
+        data: { sessionId: id },
+      });
+    }
     return c.json({ ok: true, worktree: worktreeResult });
+  });
+
+  // ─── Plugins ───────────────────────────────────────────────────────
+
+  api.get("/plugins", (c) => {
+    if (!pluginManager) return c.json([]);
+    return c.json(pluginManager.list());
+  });
+
+  api.post("/plugins/:id/enable", (c) => {
+    if (!pluginManager) return c.json({ error: "Plugins unavailable" }, 503);
+    const id = c.req.param("id");
+    const plugin = pluginManager.setEnabled(id, true);
+    if (!plugin) return c.json({ error: "Plugin not found" }, 404);
+    return c.json(plugin);
+  });
+
+  api.post("/plugins/:id/disable", (c) => {
+    if (!pluginManager) return c.json({ error: "Plugins unavailable" }, 503);
+    const id = c.req.param("id");
+    const plugin = pluginManager.setEnabled(id, false);
+    if (!plugin) return c.json({ error: "Plugin not found" }, 404);
+    return c.json(plugin);
+  });
+
+  api.put("/plugins/:id/config", async (c) => {
+    if (!pluginManager) return c.json({ error: "Plugins unavailable" }, 503);
+    const id = c.req.param("id");
+    const body = await c.req.json().catch(() => ({}));
+    let plugin;
+    try {
+      plugin = pluginManager.updateConfig(id, body.config);
+    } catch (err) {
+      if (err instanceof PluginConfigValidationError) {
+        return c.json({ error: err.message }, 400);
+      }
+      throw err;
+    }
+    if (!plugin) return c.json({ error: "Plugin not found" }, 404);
+    return c.json(plugin);
   });
 
   api.post("/sessions/:id/unarchive", (c) => {

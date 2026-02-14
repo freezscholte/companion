@@ -11,7 +11,7 @@ export function TopBar() {
     },
     () => window.location.hash,
   );
-  const isSessionView = hash !== "#/settings" && hash !== "#/terminal" && hash !== "#/environments";
+  const isSessionView = hash !== "#/settings" && hash !== "#/terminal" && hash !== "#/environments" && hash !== "#/plugins";
   const currentSessionId = useStore((s) => s.currentSessionId);
   const cliConnected = useStore((s) => s.cliConnected);
   const sessionStatus = useStore((s) => s.sessionStatus);
@@ -34,6 +34,10 @@ export function TopBar() {
     if (!cwd) return files.size;
     const prefix = `${cwd}/`;
     return [...files].filter((fp) => fp === cwd || fp.startsWith(prefix)).length;
+  });
+  const pluginInsightsCount = useStore((s) => {
+    if (!currentSessionId) return 0;
+    return s.pluginInsights.get(currentSessionId)?.length || 0;
   });
 
   const cwd = useStore((s) => {
@@ -153,7 +157,7 @@ export function TopBar() {
 
           <button
             onClick={() => setTaskPanelOpen(!taskPanelOpen)}
-            className={`flex items-center justify-center w-7 h-7 rounded-lg transition-colors cursor-pointer ${
+            className={`relative flex items-center justify-center w-7 h-7 rounded-lg transition-colors cursor-pointer ${
               taskPanelOpen
                 ? "text-cc-primary bg-cc-active"
                 : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
@@ -163,6 +167,11 @@ export function TopBar() {
             <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
               <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4a2 2 0 00-2-2H6zm1 3a1 1 0 000 2h6a1 1 0 100-2H7zm0 4a1 1 0 000 2h6a1 1 0 100-2H7zm0 4a1 1 0 000 2h4a1 1 0 100-2H7z" clipRule="evenodd" />
             </svg>
+            {pluginInsightsCount > 0 && (
+              <span className="absolute -mt-5 ml-5 text-[9px] bg-cc-primary text-white rounded-full min-w-[14px] h-[14px] px-1 flex items-center justify-center font-semibold leading-none">
+                {Math.min(pluginInsightsCount, 99)}
+              </span>
+            )}
           </button>
         </div>
       )}

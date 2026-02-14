@@ -674,6 +674,35 @@ export function Playground() {
           </div>
         </Section>
 
+        <Section title="Automations" description="Plugin insights shown in the Session task panel">
+          <div className="w-[280px] border border-cc-border rounded-xl overflow-hidden bg-cc-card">
+            <div className="px-4 py-2.5 border-b border-cc-border flex items-center justify-between">
+              <span className="text-[12px] font-semibold text-cc-fg">Automations</span>
+              <span className="text-[11px] text-cc-muted tabular-nums">3</span>
+            </div>
+            <div className="px-3 py-2 border-b border-cc-border space-y-1">
+              <div className="px-2.5 py-2 rounded-lg bg-cc-hover/50">
+                <div className="flex items-start gap-2">
+                  <span className="w-2 h-2 rounded-full mt-1.5 bg-cc-success" />
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-medium text-cc-fg">Permission auto-handled</p>
+                    <p className="text-[11px] text-cc-muted break-words">Read: allow via rule allow-read.</p>
+                  </div>
+                </div>
+              </div>
+              <div className="px-2.5 py-2 rounded-lg bg-cc-hover/50">
+                <div className="flex items-start gap-2">
+                  <span className="w-2 h-2 rounded-full mt-1.5 bg-cc-warning" />
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-medium text-cc-fg">Session ended</p>
+                    <p className="text-[11px] text-cc-muted break-words">Event session.archived on s1.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Section>
+
         {/* ─── GitHub PR Status ──────────────────────────────── */}
         <Section title="GitHub PR Status" description="PR health shown in the TaskPanel — checks, reviews, unresolved comments">
           <div className="space-y-4">

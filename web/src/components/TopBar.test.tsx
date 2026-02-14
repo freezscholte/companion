@@ -21,6 +21,7 @@ interface MockStoreState {
   sessions: Map<string, { cwd?: string }>;
   sdkSessions: { sessionId: string; cwd?: string }[];
   changedFiles: Map<string, Set<string>>;
+  pluginInsights: Map<string, { id: string }[]>;
 }
 
 let storeState: MockStoreState;
@@ -39,6 +40,7 @@ function resetStore(overrides: Partial<MockStoreState> = {}) {
     sessions: new Map([["s1", { cwd: "/repo" }]]),
     sdkSessions: [],
     changedFiles: new Map(),
+    pluginInsights: new Map(),
     ...overrides,
   };
 }

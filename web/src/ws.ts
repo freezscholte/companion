@@ -459,6 +459,18 @@ function handleParsedMessage(
       break;
     }
 
+    case "plugin_insight": {
+      store.addPluginInsight(sessionId, data.insight);
+      const prefix = data.insight.title ? `[Plugin] ${data.insight.title}: ` : "[Plugin] ";
+      store.appendMessage(sessionId, {
+        id: data.insight.id,
+        role: "system",
+        content: `${prefix}${data.insight.message}`,
+        timestamp: data.insight.timestamp || Date.now(),
+      });
+      break;
+    }
+
     case "message_history": {
       const chatMessages: ChatMessage[] = [];
       for (let i = 0; i < data.messages.length; i++) {

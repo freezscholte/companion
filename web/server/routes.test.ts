@@ -89,6 +89,7 @@ import { Hono } from "hono";
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { createRoutes } from "./routes.js";
+import { PluginConfigValidationError } from "./plugins/manager.js";
 import * as envManager from "./env-manager.js";
 import * as gitUtils from "./git-utils.js";
 import * as sessionNames from "./session-names.js";
@@ -381,6 +382,88 @@ describe("POST /api/sessions/create", () => {
     const json = await res.json();
     expect(json.error).toContain("Invalid backend");
     expect(launcher.launch).not.toHaveBeenCalled();
+  });
+});
+
+describe("Plugin routes", () => {
+  it("GET /api/plugins returns plugin list", async () => {
+    const pluginManager = {
+      list: vi.fn(() => [{ id: "notifications", enabled: true }]),
+      setEnabled: vi.fn(),
+      updateConfig: vi.fn(),
+    } as any;
+    const pluginApp = new Hono();
+    const terminalManager = { getInfo: () => null, spawn: () => "", kill: () => {} } as any;
+    pluginApp.route("/api", createRoutes(launcher, bridge, sessionStore, tracker, terminalManager, undefined, pluginManager));
+
+    const res = await pluginApp.request("/api/plugins");
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual([{ id: "notifications", enabled: true }]);
+  });
+
+  it("POST /api/plugins/:id/enable updates plugin state", async () => {
+    const pluginManager = {
+      list: vi.fn(() => []),
+      setEnabled: vi.fn(() => ({ id: "permission-automation", enabled: true })),
+      updateConfig: vi.fn(),
+    } as any;
+    const pluginApp = new Hono();
+    const terminalManager = { getInfo: () => null, spawn: () => "", kill: () => {} } as any;
+    pluginApp.route("/api", createRoutes(launcher, bridge, sessionStore, tracker, terminalManager, undefined, pluginManager));
+
+    const res = await pluginApp.request("/api/plugins/permission-automation/enable", { method: "POST" });
+    expect(res.status).toBe(200);
+    expect(pluginManager.setEnabled).toHaveBeenCalledWith("permission-automation", true);
+  });
+
+  it("PUT /api/plugins/:id/config returns 400 for invalid config payload", async () => {
+    const pluginManager = {
+      list: vi.fn(() => []),
+      setEnabled: vi.fn(),
+      updateConfig: vi.fn(() => {
+        throw new PluginConfigValidationError(
+          "permission-automation",
+          "Invalid config for plugin permission-automation: rules must be an array",
+        );
+      }),
+    } as any;
+    const pluginApp = new Hono();
+    const terminalManager = { getInfo: () => null, spawn: () => "", kill: () => {} } as any;
+    pluginApp.route("/api", createRoutes(launcher, bridge, sessionStore, tracker, terminalManager, undefined, pluginManager));
+
+    const res = await pluginApp.request("/api/plugins/permission-automation/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config: { rules: "not-an-array" } }),
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json).toEqual({
+      error: "Invalid config for plugin permission-automation: rules must be an array",
+    });
+  });
+
+  it("PUT /api/plugins/:id/config returns 404 when plugin does not exist", async () => {
+    const pluginManager = {
+      list: vi.fn(() => []),
+      setEnabled: vi.fn(),
+      updateConfig: vi.fn(() => null),
+    } as any;
+    const pluginApp = new Hono();
+    const terminalManager = { getInfo: () => null, spawn: () => "", kill: () => {} } as any;
+    pluginApp.route("/api", createRoutes(launcher, bridge, sessionStore, tracker, terminalManager, undefined, pluginManager));
+
+    const res = await pluginApp.request("/api/plugins/missing/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config: { any: true } }),
+    });
+
+    expect(res.status).toBe(404);
+    const json = await res.json();
+    expect(json).toEqual({ error: "Plugin not found" });
   });
 });
 

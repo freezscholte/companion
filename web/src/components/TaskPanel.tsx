@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useStore } from "../store.js";
 import { api, type UsageLimits, type GitHubPRInfo } from "../api.js";
-import type { TaskItem } from "../types.js";
+import type { TaskItem, PluginInsight } from "../types.js";
 import { McpSection } from "./McpPanel.js";
 
 const EMPTY_TASKS: TaskItem[] = [];
@@ -302,6 +302,40 @@ function GitHubPRSection({ sessionId }: { sessionId: string }) {
   return <GitHubPRDisplay pr={prStatus.pr} />;
 }
 
+function insightDot(level: PluginInsight["level"]): string {
+  if (level === "error") return "bg-cc-error";
+  if (level === "warning") return "bg-cc-warning";
+  if (level === "success") return "bg-cc-success";
+  return "bg-cc-primary";
+}
+
+function PluginInsightsSection({ sessionId }: { sessionId: string }) {
+  const insights = useStore((s) => s.pluginInsights.get(sessionId) || []);
+  if (insights.length === 0) return null;
+
+  return (
+    <>
+      <div className="px-4 py-2.5 border-b border-cc-border flex items-center justify-between">
+        <span className="text-[12px] font-semibold text-cc-fg">Automations</span>
+        <span className="text-[11px] text-cc-muted tabular-nums">{insights.length}</span>
+      </div>
+      <div className="px-3 py-2 border-b border-cc-border space-y-1">
+        {insights.slice(-10).reverse().map((insight) => (
+          <div key={insight.id} className="px-2.5 py-2 rounded-lg bg-cc-hover/50">
+            <div className="flex items-start gap-2">
+              <span className={`w-2 h-2 rounded-full mt-1.5 ${insightDot(insight.level)}`} />
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium text-cc-fg">{insight.title}</p>
+                <p className="text-[11px] text-cc-muted break-words">{insight.message}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
 // ─── Task Panel ──────────────────────────────────────────────────────────────
 
 export function TaskPanel({ sessionId }: { sessionId: string }) {
@@ -349,6 +383,9 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
 
         {/* MCP servers */}
         <McpSection sessionId={sessionId} />
+
+        {/* Plugin automation insights */}
+        <PluginInsightsSection sessionId={sessionId} />
 
         {showTasks && (
           <>

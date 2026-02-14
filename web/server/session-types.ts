@@ -204,7 +204,8 @@ export type BrowserIncomingMessageBase =
   | { type: "event_replay"; events: BufferedBrowserEvent[] }
   | { type: "session_name_update"; name: string }
   | { type: "pr_status_update"; pr: import("./github-pr.js").GitHubPRInfo | null; available: boolean }
-  | { type: "mcp_status"; servers: McpServerDetail[] };
+  | { type: "mcp_status"; servers: McpServerDetail[] }
+  | { type: "plugin_insight"; insight: PluginInsight };
 
 export type BrowserIncomingMessage = BrowserIncomingMessageBase & { seq?: number };
 
@@ -287,4 +288,15 @@ export interface PermissionRequest {
   tool_use_id: string;
   agent_id?: string;
   timestamp: number;
+}
+
+export interface PluginInsight {
+  id: string;
+  plugin_id: string;
+  title: string;
+  message: string;
+  level: "info" | "success" | "warning" | "error";
+  timestamp: number;
+  session_id?: string;
+  event_name?: string;
 }
