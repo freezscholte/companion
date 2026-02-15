@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { api, type CronJobInfo } from "../api.js";
-import { getModelsForBackend, getDefaultModel, toModelOptions, type ModelOption } from "../utils/backends.js";
+import { getModelsForBackend, getCronModesForBackend, getDefaultModel, getDefaultMode, toModelOptions, type ModelOption } from "../utils/backends.js";
 import { FolderPicker } from "./FolderPicker.js";
 
 interface Props {
@@ -90,6 +90,7 @@ interface JobFormData {
   oneTimeDate: string;
   backendType: "claude" | "codex";
   model: string;
+  permissionMode: string;
   cwd: string;
 }
 
@@ -101,6 +102,7 @@ const EMPTY_FORM: JobFormData = {
   oneTimeDate: "",
   backendType: "claude",
   model: getDefaultModel("claude"),
+  permissionMode: getDefaultMode("claude"),
   cwd: "",
 };
 
@@ -157,6 +159,7 @@ export function CronManager({ onClose, embedded = false }: Props) {
         recurring: createForm.recurring,
         backendType: createForm.backendType,
         model: createForm.model.trim() || undefined,
+        permissionMode: createForm.permissionMode,
         cwd: createForm.cwd.trim() || undefined,
       } as Partial<CronJobInfo>);
       setCreateForm(EMPTY_FORM);
@@ -181,6 +184,7 @@ export function CronManager({ onClose, embedded = false }: Props) {
       oneTimeDate: "",
       backendType: job.backendType,
       model: job.model,
+      permissionMode: job.permissionMode,
       cwd: job.cwd,
     });
     setError("");
@@ -210,6 +214,7 @@ export function CronManager({ onClose, embedded = false }: Props) {
         recurring: editForm.recurring,
         backendType: editForm.backendType,
         model: editForm.model.trim() || undefined,
+        permissionMode: editForm.permissionMode,
         cwd: editForm.cwd.trim() || undefined,
       } as Partial<CronJobInfo>);
       setEditingId(null);
@@ -446,7 +451,7 @@ export function CronManager({ onClose, embedded = false }: Props) {
         <div className="px-3 py-3 space-y-2.5">
           <JobForm form={createForm} onChange={setCreateForm} />
           <div className="text-[10px] text-cc-muted">
-            Scheduled tasks run with full autonomy (bypassPermissions)
+            Mode is locked once the session starts.
           </div>
           <button
             onClick={handleCreate}
@@ -550,6 +555,8 @@ function JobForm({
 
   const models = dynamicModels || getModelsForBackend(form.backendType);
   const selectedModel = models.find((m) => m.value === form.model) || models[0];
+  const modes = getCronModesForBackend(form.backendType);
+  const selectedMode = modes.find((m) => m.value === form.permissionMode) || modes[0];
 
   // Fetch dynamic models when backend changes
   useEffect(() => {
@@ -684,7 +691,7 @@ function JobForm({
         <button
           onClick={() => {
             const next = form.backendType === "claude" ? "codex" : "claude";
-            update({ backendType: next as "claude" | "codex", model: getDefaultModel(next as "claude" | "codex") });
+            update({ backendType: next as "claude" | "codex", model: getDefaultModel(next as "claude" | "codex"), permissionMode: getDefaultMode(next as "claude" | "codex") });
           }}
           className={`px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
             form.backendType === "codex"
@@ -694,6 +701,23 @@ function JobForm({
         >
           {form.backendType === "codex" ? "Codex" : "Claude Code"}
         </button>
+
+        {/* Mode selector */}
+        <div className="flex items-center gap-0.5 rounded-lg border border-cc-border overflow-hidden">
+          {modes.map((m) => (
+            <button
+              key={m.value}
+              onClick={() => update({ permissionMode: m.value })}
+              className={`px-2 py-1.5 text-[11px] font-medium transition-colors cursor-pointer ${
+                form.permissionMode === m.value
+                  ? "bg-cc-primary/15 text-cc-primary"
+                  : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
 
         {/* Model dropdown */}
         <div className="relative" ref={modelDropdownRef}>

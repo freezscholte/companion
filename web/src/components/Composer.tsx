@@ -47,6 +47,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const currentMode = sessionData?.permissionMode || "acceptEdits";
   const isPlan = currentMode === "plan";
   const isCodex = sessionData?.backend_type === "codex";
+  const isCronSession = !!sessionData?.cronJobId;
   const modes: ModeOption[] = isCodex ? CODEX_MODES : CLAUDE_MODES;
   const modeLabel = modes.find((m) => m.value === currentMode)?.label?.toLowerCase() || currentMode;
 
@@ -227,7 +228,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
   }
 
   function toggleMode() {
-    if (!isConnected || isCodex) return;
+    if (!isConnected || isCodex || isCronSession) return;
     const store = useStore.getState();
     if (!isPlan) {
       store.setPreviousPermissionMode(sessionId, currentMode);
@@ -386,15 +387,15 @@ export function Composer({ sessionId }: { sessionId: string }) {
             {/* Left: mode indicator */}
             <button
               onClick={toggleMode}
-              disabled={!isConnected || isCodex}
+              disabled={!isConnected || isCodex || isCronSession}
               className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[12px] font-medium transition-all select-none ${
-                !isConnected || isCodex
+                !isConnected || isCodex || isCronSession
                   ? "opacity-30 cursor-not-allowed text-cc-muted"
                   : isPlan
                   ? "text-cc-primary hover:bg-cc-primary/10 cursor-pointer"
                   : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
               }`}
-              title={isCodex ? "Mode is fixed for Codex sessions" : "Toggle mode (Shift+Tab)"}
+              title={isCronSession ? "Mode is locked for scheduled sessions" : isCodex ? "Mode is fixed for Codex sessions" : "Toggle mode (Shift+Tab)"}
             >
               {isPlan ? (
                 <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">

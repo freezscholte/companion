@@ -64,6 +64,20 @@ export const CODEX_MODES: ModeOption[] = [
   { value: "plan", label: "Suggest" },
 ];
 
+// Cron job forms expose more modes than the Composer toggle
+export const CLAUDE_CRON_MODES: ModeOption[] = [
+  { value: "bypassPermissions", label: "Autonomous" },
+  { value: "acceptEdits", label: "Accept Edits" },
+  { value: "dontAsk", label: "Don't Ask" },
+  { value: "plan", label: "Plan" },
+];
+
+export const CODEX_CRON_MODES: ModeOption[] = [
+  { value: "bypassPermissions", label: "Auto" },
+  { value: "acceptEdits", label: "Accept Edits" },
+  { value: "plan", label: "Suggest" },
+];
+
 // ─── Getters ─────────────────────────────────────────────────────────────────
 
 export function getModelsForBackend(backend: BackendType): ModelOption[] {
@@ -72,6 +86,10 @@ export function getModelsForBackend(backend: BackendType): ModelOption[] {
 
 export function getModesForBackend(backend: BackendType): ModeOption[] {
   return backend === "codex" ? CODEX_MODES : CLAUDE_MODES;
+}
+
+export function getCronModesForBackend(backend: BackendType): ModeOption[] {
+  return backend === "codex" ? CODEX_CRON_MODES : CLAUDE_CRON_MODES;
 }
 
 export function getDefaultModel(backend: BackendType): string {
