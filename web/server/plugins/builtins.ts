@@ -9,13 +9,22 @@ import type {
 } from "./types.js";
 
 interface NotificationsPluginConfig {
-  onSessionCreated: boolean;
-  onSessionEnded: boolean;
-  onResultSuccess: boolean;
-  onResultError: boolean;
-  onPermissionRequest: boolean;
-  onPermissionResponse: boolean;
-  onToolLifecycle: boolean;
+  events: {
+    sessionCreated: boolean;
+    sessionEnded: boolean;
+    resultSuccess: boolean;
+    resultError: boolean;
+    permissionRequest: boolean;
+    permissionResponse: boolean;
+  };
+  channels: {
+    toast: boolean;
+    sound: boolean;
+    desktop: boolean;
+  };
+  toolLifecycleMode: "off" | "summary" | "verbose";
+  suppressAutomatedPermissionResponses: boolean;
+  throttleMs: number;
 }
 
 interface PermissionRule {
@@ -41,16 +50,37 @@ function asString(v: unknown): string | undefined {
   return typeof v === "string" && v.trim() ? v.trim() : undefined;
 }
 
+function asNumber(v: unknown, fallback: number): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+}
+
+function asToolLifecycleMode(v: unknown): NotificationsPluginConfig["toolLifecycleMode"] {
+  if (v === "summary" || v === "verbose" || v === "off") return v;
+  return "off";
+}
+
 function normalizeNotificationsConfig(input: unknown): NotificationsPluginConfig {
   const src = input && typeof input === "object" ? input as Record<string, unknown> : {};
+  const events = src.events && typeof src.events === "object" ? src.events as Record<string, unknown> : {};
+  const channels = src.channels && typeof src.channels === "object" ? src.channels as Record<string, unknown> : {};
+
   return {
-    onSessionCreated: asBoolean(src.onSessionCreated, false),
-    onSessionEnded: asBoolean(src.onSessionEnded, true),
-    onResultSuccess: asBoolean(src.onResultSuccess, false),
-    onResultError: asBoolean(src.onResultError, true),
-    onPermissionRequest: asBoolean(src.onPermissionRequest, true),
-    onPermissionResponse: asBoolean(src.onPermissionResponse, true),
-    onToolLifecycle: asBoolean(src.onToolLifecycle, false),
+    events: {
+      sessionCreated: asBoolean(events.sessionCreated, false),
+      sessionEnded: asBoolean(events.sessionEnded, true),
+      resultSuccess: asBoolean(events.resultSuccess, false),
+      resultError: asBoolean(events.resultError, true),
+      permissionRequest: asBoolean(events.permissionRequest, true),
+      permissionResponse: asBoolean(events.permissionResponse, true),
+    },
+    channels: {
+      toast: asBoolean(channels.toast, true),
+      sound: asBoolean(channels.sound, true),
+      desktop: asBoolean(channels.desktop, true),
+    },
+    toolLifecycleMode: asToolLifecycleMode(src.toolLifecycleMode),
+    suppressAutomatedPermissionResponses: asBoolean(src.suppressAutomatedPermissionResponses, true),
+    throttleMs: Math.max(0, Math.min(asNumber(src.throttleMs, 1200), 30000)),
   };
 }
 
@@ -88,6 +118,33 @@ interface InsightCaps {
   toast?: boolean;
   sound?: boolean | SoundVariant;
   desktop?: boolean;
+}
+
+const notificationsThrottle = new Map<string, number>();
+
+function shouldThrottle(
+  config: NotificationsPluginConfig,
+  event: PluginEvent,
+  dedupeKey: string,
+  sessionId?: string,
+): boolean {
+  if (config.throttleMs <= 0) return false;
+  const key = `${sessionId || "global"}:${event.name}:${dedupeKey}`;
+  const now = Date.now();
+  const last = notificationsThrottle.get(key) || 0;
+  if (now - last < config.throttleMs) {
+    return true;
+  }
+  notificationsThrottle.set(key, now);
+  return false;
+}
+
+function eventCaps(config: NotificationsPluginConfig, level: PluginInsight["level"], desktopOverride?: boolean): InsightCaps {
+  return {
+    toast: config.channels.toast,
+    sound: config.channels.sound ? true : false,
+    desktop: config.channels.desktop && (desktopOverride ?? true),
+  };
 }
 
 function buildInsight(
@@ -137,40 +194,69 @@ export const notificationsPlugin: PluginDefinition<NotificationsPluginConfig> = 
   riskLevel: "low",
   defaultEnabled: true,
   defaultConfig: {
-    onSessionCreated: false,
-    onSessionEnded: true,
-    onResultSuccess: false,
-    onResultError: true,
-    onPermissionRequest: true,
-    onPermissionResponse: true,
-    onToolLifecycle: false,
+    events: {
+      sessionCreated: false,
+      sessionEnded: true,
+      resultSuccess: false,
+      resultError: true,
+      permissionRequest: true,
+      permissionResponse: true,
+    },
+    channels: {
+      toast: true,
+      sound: true,
+      desktop: true,
+    },
+    toolLifecycleMode: "off",
+    suppressAutomatedPermissionResponses: true,
+    throttleMs: 1200,
   },
   validateConfig: normalizeNotificationsConfig,
   onEvent: (event, config): PluginEventResult | void => {
     if (event.name === "session.created") {
-      if (!config.onSessionCreated) return;
+      if (!config.events.sessionCreated) return;
       const payload = (event as PluginEventOf<"session.created">).data;
+      if (shouldThrottle(config, event, "session-created", payload.session.session_id)) return;
       return {
         insights: [
-          buildInsight("notifications", event, "info", "Session created", `Session ${payload.session.session_id} started.`, payload.session.session_id, { toast: true, sound: true, desktop: true }),
+          buildInsight(
+            "notifications",
+            event,
+            "info",
+            "Session started",
+            `Session ${payload.session.session_id} launched in ${payload.session.backend_type}.`,
+            payload.session.session_id,
+            eventCaps(config, "info"),
+          ),
         ],
       };
     }
 
     if (event.name === "session.killed" || event.name === "session.archived" || event.name === "session.deleted") {
-      if (!config.onSessionEnded) return;
+      if (!config.events.sessionEnded) return;
       const payload = (event as PluginEventOf<"session.killed" | "session.archived" | "session.deleted">).data;
+      if (shouldThrottle(config, event, `session-ended:${event.name}`, payload.sessionId)) return;
       return {
         insights: [
-          buildInsight("notifications", event, "warning", "Session ended", `Event ${event.name} on ${payload.sessionId}.`, payload.sessionId, { toast: true, sound: true, desktop: true }),
+          buildInsight(
+            "notifications",
+            event,
+            "warning",
+            "Session ended",
+            `Session ${payload.sessionId} ended (${event.name}).`,
+            payload.sessionId,
+            eventCaps(config, "warning"),
+          ),
         ],
       };
     }
 
     if (event.name === "result.received") {
       const payload = (event as PluginEventOf<"result.received">).data;
-      if (!payload.success && !config.onResultError) return;
-      if (payload.success && !config.onResultSuccess) return;
+      if (!payload.success && !config.events.resultError) return;
+      if (payload.success && !config.events.resultSuccess) return;
+      const dedupeKey = payload.success ? "result-success" : `result-error:${payload.errorSummary || "unknown"}`;
+      if (shouldThrottle(config, event, dedupeKey, payload.sessionId)) return;
       return {
         insights: [
           buildInsight(
@@ -180,15 +266,16 @@ export const notificationsPlugin: PluginDefinition<NotificationsPluginConfig> = 
             payload.success ? "Execution completed" : "Execution error",
             payload.success ? `Result received (${payload.numTurns} turns).` : (payload.errorSummary || "Unknown error"),
             payload.sessionId,
-            { toast: true, sound: true, desktop: !payload.success },
+            eventCaps(config, payload.success ? "success" : "error", !payload.success),
           ),
         ],
       };
     }
 
     if (event.name === "permission.requested") {
-      if (!config.onPermissionRequest) return;
+      if (!config.events.permissionRequest) return;
       const payload = (event as PluginEventOf<"permission.requested">).data;
+      if (shouldThrottle(config, event, `perm-request:${payload.permission.tool_name}`, payload.sessionId)) return;
       return {
         insights: [
           buildInsight(
@@ -198,15 +285,17 @@ export const notificationsPlugin: PluginDefinition<NotificationsPluginConfig> = 
             "Permission requested",
             `${payload.permission.tool_name} is waiting for a decision.`,
             payload.sessionId,
-            { toast: true, sound: true, desktop: true },
+            eventCaps(config, "info"),
           ),
         ],
       };
     }
 
     if (event.name === "permission.responded") {
-      if (!config.onPermissionResponse) return;
+      if (!config.events.permissionResponse) return;
       const payload = (event as PluginEventOf<"permission.responded">).data;
+      if (config.suppressAutomatedPermissionResponses && payload.automated) return;
+      if (shouldThrottle(config, event, `perm-response:${payload.behavior}`, payload.sessionId)) return;
       return {
         insights: [
           buildInsight(
@@ -216,14 +305,19 @@ export const notificationsPlugin: PluginDefinition<NotificationsPluginConfig> = 
             "Permission responded",
             `${payload.requestId}: ${payload.behavior}${payload.automated ? " (automated)" : ""}`,
             payload.sessionId,
-            { toast: true },
+            eventCaps(config, payload.behavior === "allow" ? "success" : "warning", false),
           ),
         ],
       };
     }
 
-    if ((event.name === "tool.started" || event.name === "tool.finished") && config.onToolLifecycle) {
+    if ((event.name === "tool.started" || event.name === "tool.finished") && config.toolLifecycleMode !== "off") {
+      if (config.toolLifecycleMode === "summary" && event.name === "tool.started") return;
       const payload = (event as PluginEventOf<"tool.started" | "tool.finished">).data;
+      if (shouldThrottle(config, event, `tool:${payload.toolUseId}`, payload.sessionId)) return;
+      const message = event.name === "tool.started"
+        ? `${(event as PluginEventOf<"tool.started">).data.toolName} started (${payload.toolUseId}).`
+        : `Tool finished (${payload.toolUseId}).`;
       return {
         insights: [
           buildInsight(
@@ -231,9 +325,9 @@ export const notificationsPlugin: PluginDefinition<NotificationsPluginConfig> = 
             event,
             "info",
             event.name === "tool.started" ? "Tool started" : "Tool finished",
-            `tool_use_id=${payload.toolUseId}`,
+            message,
             payload.sessionId,
-            { toast: true },
+            eventCaps(config, "info", false),
           ),
         ],
       };

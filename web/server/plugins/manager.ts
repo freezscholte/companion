@@ -30,6 +30,8 @@ interface EmitOptions {
 }
 
 const DEFAULT_TIMEOUT_MS = 3000;
+const STATS_WINDOW_SIZE = 100;
+const DEGRADED_FAILURE_THRESHOLD = 3;
 
 class PluginTimeoutError extends Error {
   constructor(timeoutMs: number) {
@@ -106,6 +108,7 @@ export class PluginManager {
   private stats = new Map<string, PluginStats>();
   private health = new Map<string, PluginHealth>();
   private durationWindows = new Map<string, number[]>();
+  private outcomeWindows = new Map<string, Array<"success" | "error" | "timeout" | "aborted">>();
 
   constructor(stateStore?: PluginStateStore) {
     this.stateStore = stateStore || new PluginStateStore();
@@ -118,6 +121,7 @@ export class PluginManager {
     this.definitions.set(plugin.id, plugin);
     if (!this.stats.has(plugin.id)) this.stats.set(plugin.id, createEmptyStats());
     if (!this.health.has(plugin.id)) this.health.set(plugin.id, createDefaultHealth(plugin.defaultEnabled));
+    if (!this.outcomeWindows.has(plugin.id)) this.outcomeWindows.set(plugin.id, []);
   }
 
   private resolveConfig(
@@ -168,6 +172,11 @@ export class PluginManager {
     result: PluginEventResult,
     grants: Record<PluginCapability, boolean>,
   ): { sanitized: PluginEventResult; blocked: PluginCapability[] } {
+    // Backward compatibility: v1 plugins with no declared capabilities keep existing behavior.
+    if (!plugin.capabilities || plugin.capabilities.length === 0) {
+      return { sanitized: result, blocked: [] };
+    }
+
     const blocked: PluginCapability[] = [];
     const sanitized: PluginEventResult = { ...result };
 
@@ -238,8 +247,14 @@ export class PluginManager {
     if (error) next.lastError = error;
 
     const win = [...(this.durationWindows.get(pluginId) || []), durationMs];
-    if (win.length > 100) win.splice(0, win.length - 100);
+    if (win.length > STATS_WINDOW_SIZE) win.splice(0, win.length - STATS_WINDOW_SIZE);
     this.durationWindows.set(pluginId, win);
+
+    const recentOutcomes = [...(this.outcomeWindows.get(pluginId) || []), outcome];
+    if (recentOutcomes.length > STATS_WINDOW_SIZE) {
+      recentOutcomes.splice(0, recentOutcomes.length - STATS_WINDOW_SIZE);
+    }
+    this.outcomeWindows.set(pluginId, recentOutcomes);
 
     const sum = win.reduce((acc, v) => acc + v, 0);
     next.avgDurationMs = win.length > 0 ? Math.round(sum / win.length) : 0;
@@ -252,10 +267,11 @@ export class PluginManager {
 
     this.stats.set(pluginId, next);
 
-    const degraded = next.errors + next.timeouts >= 3 && next.invocations > 0;
+    const recentFailures = recentOutcomes.filter((row) => row === "error" || row === "timeout" || row === "aborted").length;
+    const degraded = recentFailures >= DEGRADED_FAILURE_THRESHOLD;
     this.health.set(pluginId, {
       status: degraded ? "degraded" : "healthy",
-      reason: degraded ? "High recent error rate" : undefined,
+      reason: degraded ? "High recent failure rate" : undefined,
       updatedAt: Date.now(),
     });
   }
@@ -400,8 +416,6 @@ export class PluginManager {
 
     const exec = await this.executePlugin(plugin, event, rawConfig);
     if (exec.error) {
-      const isTimeout = exec.error instanceof PluginTimeoutError;
-      this.updateStatsOnRun(pluginId, exec.durationMs, isTimeout ? "timeout" : "error", exec.error instanceof Error ? exec.error.message : String(exec.error));
       return {
         pluginId,
         applied: false,
@@ -413,7 +427,6 @@ export class PluginManager {
       };
     }
 
-    this.updateStatsOnRun(pluginId, exec.durationMs, "success");
     return {
       pluginId,
       applied: !!exec.result,
@@ -471,13 +484,16 @@ export class PluginManager {
       const exec = await this.executePlugin(plugin, mutableEvent, state.config[plugin.id]);
 
       if (exec.error) {
-        const isTimeout = exec.error instanceof PluginTimeoutError;
-        this.updateStatsOnRun(plugin.id, exec.durationMs, isTimeout ? "timeout" : "error", exec.error instanceof Error ? exec.error.message : String(exec.error));
+        const errText = exec.error instanceof Error ? exec.error.message : String(exec.error);
+        if (failPolicy === "abort_current_action") {
+          this.updateStatsOnRun(plugin.id, exec.durationMs, "aborted", errText);
+        } else {
+          const isTimeout = exec.error instanceof PluginTimeoutError;
+          this.updateStatsOnRun(plugin.id, exec.durationMs, isTimeout ? "timeout" : "error", errText);
+        }
         insights.push(toPluginErrorInsight(plugin.id, event, exec.error));
         if (failPolicy === "abort_current_action") {
           aborted = true;
-          const prev = this.stats.get(plugin.id) || createEmptyStats();
-          this.stats.set(plugin.id, { ...prev, aborted: prev.aborted + 1 });
           break;
         }
         continue;

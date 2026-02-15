@@ -338,13 +338,6 @@ function handleParsedMessage(
       store.setStreaming(sessionId, null);
       store.setStreamingStats(sessionId, null);
       store.setSessionStatus(sessionId, "idle");
-      // Play notification sound if enabled and tab is not focused
-      if (!document.hasFocus() && store.notificationSound) {
-        playNotificationSound();
-      }
-      if (!document.hasFocus() && store.notificationDesktop) {
-        sendBrowserNotification("Session completed", "Claude finished the task", sessionId);
-      }
       if (r.is_error && r.errors?.length) {
         store.appendMessage(sessionId, {
           id: nextId(),
@@ -358,14 +351,6 @@ function handleParsedMessage(
 
     case "permission_request": {
       store.addPermission(sessionId, data.request);
-      if (!document.hasFocus() && store.notificationDesktop) {
-        const req = data.request;
-        sendBrowserNotification(
-          "Permission needed",
-          `${req.tool_name}: approve or deny`,
-          req.request_id,
-        );
-      }
       // Also extract tasks and changed files from permission requests
       const req = data.request;
       if (req.tool_name && req.input) {

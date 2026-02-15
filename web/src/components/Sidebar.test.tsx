@@ -474,7 +474,9 @@ describe("Sidebar", () => {
 
     render(<Sidebar />);
     const nameElement = screen.getByText("Animated Name");
-    fireEvent.animationEnd(nameElement);
+    const animatedWrapper = nameElement.closest(".animate-name-appear");
+    expect(animatedWrapper).toBeTruthy();
+    fireEvent.animationEnd(animatedWrapper as Element);
     expect(mockState.clearRecentlyRenamed).toHaveBeenCalledWith("s1");
   });
 

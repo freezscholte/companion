@@ -36,11 +36,22 @@ describe("PluginManager", () => {
 
   it("applies notification plugin on result events", async () => {
     manager.updateConfig("notifications", {
-      onSessionCreated: false,
-      onSessionEnded: false,
-      onResultSuccess: true,
-      onResultError: true,
-      onPermissionRequest: false,
+      events: {
+        sessionCreated: false,
+        sessionEnded: false,
+        resultSuccess: true,
+        resultError: true,
+        permissionRequest: false,
+        permissionResponse: false,
+      },
+      channels: {
+        toast: true,
+        sound: false,
+        desktop: false,
+      },
+      toolLifecycleMode: "off",
+      suppressAutomatedPermissionResponses: true,
+      throttleMs: 0,
     });
 
     const res = await manager.emit({
@@ -532,6 +543,7 @@ describe("PluginManager", () => {
   });
 
   it("supports dry-run execution for a single plugin", async () => {
+    const beforeStats = manager.getStats("notifications");
     const result = await manager.dryRun("notifications", {
       name: "session.created",
       meta: {
@@ -572,5 +584,220 @@ describe("PluginManager", () => {
 
     expect(result?.pluginId).toBe("notifications");
     expect(result?.result.aborted).toBe(false);
+    // Dry-run should not mutate production runtime metrics.
+    expect(manager.getStats("notifications")).toEqual(beforeStats);
+  });
+
+  it("keeps v1 plugins functional when no capabilities are declared", async () => {
+    const legacyPlugin: PluginDefinition = {
+      id: "legacy-mutator",
+      name: "Legacy Mutator",
+      version: "1.0.0",
+      description: "Legacy plugin without capabilities",
+      events: ["user.message.before_send"],
+      priority: 1,
+      blocking: true,
+      defaultEnabled: true,
+      defaultConfig: {},
+      onEvent: () => ({
+        userMessageMutation: {
+          content: "legacy-updated",
+          pluginId: "legacy-mutator",
+        },
+      }),
+    };
+    manager.register(legacyPlugin);
+
+    const res = await manager.emit({
+      name: "user.message.before_send",
+      meta: {
+        eventId: "e9",
+        eventVersion: 2,
+        timestamp: Date.now(),
+        source: "ws-bridge",
+        sessionId: "s1",
+        backendType: "claude",
+      },
+      data: {
+        sessionId: "s1",
+        backendType: "claude",
+        state: {
+          session_id: "s1",
+          backend_type: "claude",
+          model: "",
+          cwd: "/tmp",
+          tools: [],
+          permissionMode: "default",
+          claude_code_version: "",
+          mcp_servers: [],
+          agents: [],
+          slash_commands: [],
+          skills: [],
+          total_cost_usd: 0,
+          num_turns: 0,
+          context_used_percent: 0,
+          is_compacting: false,
+          git_branch: "",
+          is_worktree: false,
+          repo_root: "",
+          git_ahead: 0,
+          git_behind: 0,
+          total_lines_added: 0,
+          total_lines_removed: 0,
+        },
+        content: "hello",
+      },
+    });
+
+    expect(res.userMessageMutation?.content).toBe("legacy-updated");
+  });
+
+  it("marks health degraded based on recent failures and recovers after enough successes", async () => {
+    const flakyPlugin: PluginDefinition = {
+      id: "flaky-plugin",
+      name: "Flaky",
+      version: "1.0.0",
+      description: "Fails then recovers",
+      events: ["session.created"],
+      priority: 1,
+      blocking: true,
+      defaultEnabled: true,
+      defaultConfig: {},
+      onEvent: () => undefined,
+    };
+    manager.register(flakyPlugin);
+
+    // Simulate 3 failures by using a throwing plugin then replace with stable behavior.
+    const failingPlugin = {
+      ...flakyPlugin,
+      id: "flaky-plugin",
+      onEvent: () => {
+        throw new Error("boom");
+      },
+    };
+    manager.register(failingPlugin);
+
+    for (let i = 0; i < 3; i++) {
+      await manager.emit({
+        name: "session.created",
+        meta: { eventId: `e10-${i}`, eventVersion: 2, timestamp: Date.now(), source: "routes", sessionId: "s1", backendType: "claude" },
+        data: {
+          session: {
+            session_id: "s1",
+            backend_type: "claude",
+            model: "",
+            cwd: "/tmp",
+            tools: [],
+            permissionMode: "default",
+            claude_code_version: "",
+            mcp_servers: [],
+            agents: [],
+            slash_commands: [],
+            skills: [],
+            total_cost_usd: 0,
+            num_turns: 0,
+            context_used_percent: 0,
+            is_compacting: false,
+            git_branch: "",
+            is_worktree: false,
+            repo_root: "",
+            git_ahead: 0,
+            git_behind: 0,
+            total_lines_added: 0,
+            total_lines_removed: 0,
+          },
+        },
+      });
+    }
+    expect(manager.list().find((p) => p.id === "flaky-plugin")?.health.status).toBe("degraded");
+
+    manager.register(flakyPlugin);
+    for (let i = 0; i < 100; i++) {
+      await manager.emit({
+        name: "session.created",
+        meta: { eventId: `e11-${i}`, eventVersion: 2, timestamp: Date.now(), source: "routes", sessionId: "s1", backendType: "claude" },
+        data: {
+          session: {
+            session_id: "s1",
+            backend_type: "claude",
+            model: "",
+            cwd: "/tmp",
+            tools: [],
+            permissionMode: "default",
+            claude_code_version: "",
+            mcp_servers: [],
+            agents: [],
+            slash_commands: [],
+            skills: [],
+            total_cost_usd: 0,
+            num_turns: 0,
+            context_used_percent: 0,
+            is_compacting: false,
+            git_branch: "",
+            is_worktree: false,
+            repo_root: "",
+            git_ahead: 0,
+            git_behind: 0,
+            total_lines_added: 0,
+            total_lines_removed: 0,
+          },
+        },
+      });
+    }
+    expect(manager.list().find((p) => p.id === "flaky-plugin")?.health.status).toBe("healthy");
+  });
+
+  it("counts aborted invocations without double-counting as errors", async () => {
+    const abortingPlugin: PluginDefinition = {
+      id: "aborting-plugin",
+      name: "Aborting",
+      version: "1.0.0",
+      description: "Always throws and aborts current action",
+      events: ["session.created"],
+      priority: 100,
+      blocking: true,
+      failPolicy: "abort_current_action",
+      defaultEnabled: true,
+      defaultConfig: {},
+      onEvent: () => {
+        throw new Error("abort");
+      },
+    };
+    manager.register(abortingPlugin);
+
+    await manager.emit({
+      name: "session.created",
+      meta: { eventId: "e12", eventVersion: 2, timestamp: Date.now(), source: "routes", sessionId: "s1", backendType: "claude" },
+      data: {
+        session: {
+          session_id: "s1",
+          backend_type: "claude",
+          model: "",
+          cwd: "/tmp",
+          tools: [],
+          permissionMode: "default",
+          claude_code_version: "",
+          mcp_servers: [],
+          agents: [],
+          slash_commands: [],
+          skills: [],
+          total_cost_usd: 0,
+          num_turns: 0,
+          context_used_percent: 0,
+          is_compacting: false,
+          git_branch: "",
+          is_worktree: false,
+          repo_root: "",
+          git_ahead: 0,
+          git_behind: 0,
+          total_lines_added: 0,
+          total_lines_removed: 0,
+        },
+      },
+    });
+
+    const stats = manager.getStats("aborting-plugin");
+    expect(stats?.aborted).toBe(1);
+    expect(stats?.errors).toBe(0);
   });
 });
