@@ -12,9 +12,9 @@ interface VarRow {
   value: string;
 }
 
-type Tab = "variables" | "docker" | "ports";
+type Tab = "variables" | "docker" | "ports" | "init";
 
-const DEFAULT_DOCKERFILE = `FROM companion-dev:latest
+const DEFAULT_DOCKERFILE = `FROM the-companion:latest
 
 # Add project-specific dependencies here
 # RUN apt-get update && apt-get install -y ...
@@ -33,6 +33,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
   const [editDockerfile, setEditDockerfile] = useState("");
   const [editBaseImage, setEditBaseImage] = useState("");
   const [editPorts, setEditPorts] = useState<number[]>([]);
+  const [editInitScript, setEditInitScript] = useState("");
   const [error, setError] = useState("");
 
   // Docker build state
@@ -50,6 +51,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
   const [newDockerfile, setNewDockerfile] = useState("");
   const [newBaseImage, setNewBaseImage] = useState("");
   const [newPorts, setNewPorts] = useState<number[]>([]);
+  const [newInitScript, setNewInitScript] = useState("");
   const [newTab, setNewTab] = useState<Tab>("variables");
   const [creating, setCreating] = useState(false);
 
@@ -77,6 +79,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
     setEditDockerfile(env.dockerfile || "");
     setEditBaseImage(env.baseImage || "");
     setEditPorts(env.ports || []);
+    setEditInitScript(env.initScript || "");
     setError("");
     setBuildLog("");
     setShowBuildLog(false);
@@ -101,6 +104,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
         dockerfile: editDockerfile || undefined,
         baseImage: editBaseImage || undefined,
         ports: editPorts.length > 0 ? editPorts : undefined,
+        initScript: editInitScript || undefined,
       });
       setEditingSlug(null);
       setError("");
@@ -134,12 +138,14 @@ export function EnvManager({ onClose, embedded = false }: Props) {
         dockerfile: newDockerfile || undefined,
         baseImage: newBaseImage || undefined,
         ports: newPorts.length > 0 ? newPorts : undefined,
+        initScript: newInitScript || undefined,
       });
       setNewName("");
       setNewVars([{ key: "", value: "" }]);
       setNewDockerfile("");
       setNewBaseImage("");
       setNewPorts([]);
+      setNewInitScript("");
       setNewTab("variables");
       setError("");
       refresh();
@@ -195,7 +201,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
   function renderTabs(activeTab: Tab, setTab: (t: Tab) => void) {
     return (
       <div className="flex gap-0.5 border-b border-cc-border mb-2.5">
-        {(["variables", "docker", "ports"] as Tab[]).map((t) => (
+        {(["variables", "docker", "ports", "init"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -231,9 +237,9 @@ export function EnvManager({ onClose, embedded = false }: Props) {
             className="w-full px-2 py-1.5 text-xs bg-cc-input-bg border border-cc-border rounded-md text-cc-fg focus:outline-none focus:border-cc-primary/50"
           >
             <option value="">None (local execution)</option>
-            <option value="companion-dev:latest">companion-dev:latest</option>
+            <option value="the-companion:latest">the-companion:latest</option>
             {availableImages
-              .filter((img) => img !== "companion-dev:latest")
+              .filter((img) => img !== "the-companion:latest")
               .map((img) => (
                 <option key={img} value={img}>{img}</option>
               ))}
@@ -351,6 +357,34 @@ export function EnvManager({ onClose, embedded = false }: Props) {
     );
   }
 
+  function renderInitScriptTab(
+    initScript: string,
+    setInitScript: (v: string) => void,
+  ) {
+    return (
+      <div className="space-y-3">
+        <div>
+          <label className="block text-[11px] text-cc-muted mb-1">
+            Init Script
+          </label>
+          <textarea
+            value={initScript}
+            onChange={(e) => setInitScript(e.target.value)}
+            placeholder={"# Runs inside the container before Claude starts\n# Example:\nbun install\npip install -r requirements.txt"}
+            rows={10}
+            className="w-full px-3 py-2 text-[11px] font-mono-code bg-cc-input-bg border border-cc-border rounded-md text-cc-fg placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/50 resize-y"
+            style={{ minHeight: "120px" }}
+          />
+        </div>
+        <p className="text-[10px] text-cc-muted">
+          This shell script runs as root inside the container via{" "}
+          <code className="bg-cc-hover px-1 rounded">sh -lc</code> before the session starts.
+          Use it to install project-specific dependencies. Timeout: 120s.
+        </p>
+      </div>
+    );
+  }
+
   const environmentsList = loading ? (
     <div className="text-sm text-cc-muted text-center py-6">Loading environments...</div>
   ) : envs.length === 0 ? (
@@ -423,6 +457,10 @@ export function EnvManager({ onClose, embedded = false }: Props) {
                   <div className="text-[11px] font-medium text-cc-muted mb-1.5">Ports</div>
                   {renderPortsTab(editPorts, setEditPorts)}
                 </div>
+                <div>
+                  <div className="text-[11px] font-medium text-cc-muted mb-1.5">Init Script</div>
+                  {renderInitScriptTab(editInitScript, setEditInitScript)}
+                </div>
               </div>
               <button
                 onClick={saveEdit}
@@ -470,6 +508,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
         {newTab === "variables" && <VarEditor rows={newVars} onChange={setNewVars} />}
         {newTab === "docker" && renderDockerTab(newDockerfile, setNewDockerfile, newBaseImage, setNewBaseImage)}
         {newTab === "ports" && renderPortsTab(newPorts, setNewPorts)}
+        {newTab === "init" && renderInitScriptTab(newInitScript, setNewInitScript)}
         <button
           onClick={handleCreate}
           disabled={!newName.trim() || creating}

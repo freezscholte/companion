@@ -236,6 +236,7 @@ export interface CompanionEnv {
   lastBuiltAt?: number;
   ports?: number[];
   volumes?: string[];
+  initScript?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -404,6 +405,7 @@ export const api = {
     baseImage?: string;
     ports?: number[];
     volumes?: string[];
+    initScript?: string;
   }) =>
     post<CompanionEnv>("/envs", { name, variables, ...docker }),
   updateEnv: (
@@ -415,6 +417,7 @@ export const api = {
       baseImage?: string;
       ports?: number[];
       volumes?: string[];
+      initScript?: string;
     },
   ) => put<CompanionEnv>(`/envs/${encodeURIComponent(slug)}`, data),
   deleteEnv: (slug: string) => del(`/envs/${encodeURIComponent(slug)}`),

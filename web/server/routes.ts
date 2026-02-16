@@ -162,24 +162,36 @@ export function createRoutes(
       // return an explicit error.
       if (effectiveImage) {
         if (!containerManager.imageExists(effectiveImage)) {
-          if (effectiveImage === "companion-dev:latest") {
-            const dockerfilePath = join(WEB_DIR, "docker", "Dockerfile.companion-dev");
-            if (!existsSync(dockerfilePath)) {
-              return c.json({
-                error:
-                  "Docker image companion-dev:latest is missing and base Dockerfile was not found at " +
-                  dockerfilePath,
-              }, 503);
-            }
-            try {
-              console.log("[routes] companion-dev:latest missing, building image automatically...");
-              containerManager.buildImage(dockerfilePath, "companion-dev:latest");
-            } catch (err) {
-              const reason = err instanceof Error ? err.message : String(err);
-              return c.json({
-                error:
-                  "Docker image companion-dev:latest is missing and auto-build failed: " + reason,
-              }, 503);
+          // Auto-build for default images (the-companion or legacy companion-dev)
+          const isDefaultImage = effectiveImage === "the-companion:latest" || effectiveImage === "companion-dev:latest";
+          if (isDefaultImage) {
+            // Try fallback: if the-companion requested but companion-dev exists, use it
+            if (effectiveImage === "the-companion:latest" && containerManager.imageExists("companion-dev:latest")) {
+              console.warn("[routes] the-companion:latest not found, falling back to companion-dev:latest (deprecated)");
+              // Update effectiveImage for this session to use the fallback
+              // (the variable is let-bound above, but we shadow it here since it's used below)
+            } else {
+              // Determine which Dockerfile to build
+              const dockerfileName = effectiveImage === "the-companion:latest"
+                ? "Dockerfile.the-companion"
+                : "Dockerfile.companion-dev";
+              const dockerfilePath = join(WEB_DIR, "docker", dockerfileName);
+              if (!existsSync(dockerfilePath)) {
+                return c.json({
+                  error:
+                    `Docker image ${effectiveImage} is missing and base Dockerfile was not found at ${dockerfilePath}`,
+                }, 503);
+              }
+              try {
+                console.log(`[routes] ${effectiveImage} missing, building image automatically...`);
+                containerManager.buildImage(dockerfilePath, effectiveImage);
+              } catch (err) {
+                const reason = err instanceof Error ? err.message : String(err);
+                return c.json({
+                  error:
+                    `Docker image ${effectiveImage} is missing and auto-build failed: ${reason}`,
+                }, 503);
+              }
             }
           } else {
             return c.json({
@@ -216,6 +228,32 @@ export function createRoutes(
         // Note: we intentionally do NOT run git checkout inside the container.
         // The container uses a bind mount of hostCwd at /workspace, so the host
         // checkout state is already visible inside the container.
+
+        // Run per-environment init script if configured
+        if (companionEnv?.initScript?.trim()) {
+          try {
+            console.log(`[routes] Running init script for env "${companionEnv.name}" in container ${containerInfo.name}...`);
+            const initTimeout = Number(process.env.COMPANION_INIT_SCRIPT_TIMEOUT) || 120_000;
+            const result = await containerManager.execInContainerAsync(
+              containerInfo.containerId,
+              ["sh", "-lc", companionEnv.initScript],
+              { timeout: initTimeout },
+            );
+            if (result.exitCode !== 0) {
+              containerManager.removeContainer(tempId);
+              return c.json({
+                error: `Init script failed (exit ${result.exitCode}):\n${result.output.slice(-2000)}`,
+              }, 503);
+            }
+            console.log(`[routes] Init script completed successfully for env "${companionEnv.name}"`);
+          } catch (e) {
+            containerManager.removeContainer(tempId);
+            const reason = e instanceof Error ? e.message : String(e);
+            return c.json({
+              error: `Init script execution failed: ${reason}`,
+            }, 503);
+          }
+        }
       }
 
       const session = launcher.launch({
@@ -705,6 +743,7 @@ export function createRoutes(
         baseImage: body.baseImage,
         ports: body.ports,
         volumes: body.volumes,
+        initScript: body.initScript,
       });
       return c.json(env, 201);
     } catch (e: unknown) {
@@ -724,6 +763,7 @@ export function createRoutes(
         baseImage: body.baseImage,
         ports: body.ports,
         volumes: body.volumes,
+        initScript: body.initScript,
       });
       if (!env) return c.json({ error: "Environment not found" }, 404);
       return c.json(env);
@@ -779,13 +819,13 @@ export function createRoutes(
 
   api.post("/docker/build-base", async (c) => {
     if (!containerManager.checkDocker()) return c.json({ error: "Docker is not available" }, 503);
-    // Build the companion-dev base image from the repo's Dockerfile
-    const dockerfilePath = join(WEB_DIR, "docker", "Dockerfile.companion-dev");
+    // Build the-companion base image from the repo's Dockerfile
+    const dockerfilePath = join(WEB_DIR, "docker", "Dockerfile.the-companion");
     if (!existsSync(dockerfilePath)) {
       return c.json({ error: "Base Dockerfile not found at " + dockerfilePath }, 404);
     }
     try {
-      const log = containerManager.buildImage(dockerfilePath, "companion-dev:latest");
+      const log = containerManager.buildImage(dockerfilePath, "the-companion:latest");
       return c.json({ success: true, log });
     } catch (e: unknown) {
       return c.json({ success: false, error: e instanceof Error ? e.message : String(e) }, 500);
@@ -793,8 +833,8 @@ export function createRoutes(
   });
 
   api.get("/docker/base-image", (c) => {
-    const exists = containerManager.imageExists("companion-dev:latest");
-    return c.json({ exists, image: "companion-dev:latest" });
+    const exists = containerManager.imageExists("the-companion:latest");
+    return c.json({ exists, image: "the-companion:latest" });
   });
 
   // ─── Settings (~/.companion/settings.json) ────────────────────────

@@ -392,6 +392,89 @@ describe("POST /api/sessions/create", () => {
     );
     expect(launcher.launch).toHaveBeenCalled();
   });
+
+  it("runs init script before launching CLI when env has initScript", async () => {
+    // Environment with initScript and Docker image
+    vi.mocked(envManager.getEnv).mockReturnValue({
+      name: "WithInit",
+      slug: "with-init",
+      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
+      baseImage: "the-companion:latest",
+      initScript: "bun install && pip install -r requirements.txt",
+      createdAt: 1000,
+      updatedAt: 1000,
+    } as any);
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
+    vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
+      containerId: "cid-init",
+      name: "companion-init",
+      image: "the-companion:latest",
+      portMappings: [],
+      hostCwd: "/test",
+      containerCwd: "/workspace",
+      state: "running",
+    });
+    vi.spyOn(containerManager, "retrack").mockImplementation(() => {});
+    const execAsyncSpy = vi.spyOn(containerManager, "execInContainerAsync")
+      .mockResolvedValueOnce({ exitCode: 0, output: "installed!" });
+
+    const res = await app.request("/api/sessions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: "/test", envSlug: "with-init" }),
+    });
+
+    expect(res.status).toBe(200);
+    // Init script should have been executed
+    expect(execAsyncSpy).toHaveBeenCalledWith(
+      "cid-init",
+      ["sh", "-lc", "bun install && pip install -r requirements.txt"],
+      expect.objectContaining({ timeout: expect.any(Number) }),
+    );
+    // CLI should have been launched after init script
+    expect(launcher.launch).toHaveBeenCalled();
+  });
+
+  it("returns 503 and cleans up container when init script fails", async () => {
+    vi.mocked(envManager.getEnv).mockReturnValue({
+      name: "FailInit",
+      slug: "fail-init",
+      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
+      baseImage: "the-companion:latest",
+      initScript: "exit 1",
+      createdAt: 1000,
+      updatedAt: 1000,
+    } as any);
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
+    vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
+      containerId: "cid-fail",
+      name: "companion-fail",
+      image: "the-companion:latest",
+      portMappings: [],
+      hostCwd: "/test",
+      containerCwd: "/workspace",
+      state: "running",
+    });
+    const removeSpy = vi.spyOn(containerManager, "removeContainer").mockImplementation(() => {});
+    vi.spyOn(containerManager, "execInContainerAsync")
+      .mockResolvedValueOnce({ exitCode: 1, output: "npm ERR! missing script" });
+
+    const res = await app.request("/api/sessions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: "/test", envSlug: "fail-init" }),
+    });
+
+    expect(res.status).toBe(503);
+    const json = await res.json();
+    expect(json.error).toContain("Init script failed");
+    // Container should be cleaned up
+    expect(removeSpy).toHaveBeenCalled();
+    // CLI should NOT have been launched
+    expect(launcher.launch).not.toHaveBeenCalled();
+  });
 });
 
 describe("GET /api/sessions", () => {

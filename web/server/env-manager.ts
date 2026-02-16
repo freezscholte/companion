@@ -33,6 +33,8 @@ export interface CompanionEnv {
   ports?: number[];
   /** Extra volume mounts in "host:container[:opts]" format */
   volumes?: string[];
+  /** Shell script to run inside the container before the CLI session starts */
+  initScript?: string;
 
   createdAt: number;
   updatedAt: number;
@@ -47,6 +49,7 @@ export interface EnvUpdateFields {
   baseImage?: string;
   ports?: number[];
   volumes?: string[];
+  initScript?: string;
 }
 
 // ─── Paths ──────────────────────────────────────────────────────────────────
@@ -123,6 +126,7 @@ export function createEnv(
     baseImage?: string;
     ports?: number[];
     volumes?: string[];
+    initScript?: string;
   },
 ): CompanionEnv {
   if (!name || !name.trim()) throw new Error("Environment name is required");
@@ -149,6 +153,7 @@ export function createEnv(
     if (docker.baseImage !== undefined) env.baseImage = docker.baseImage;
     if (docker.ports !== undefined) env.ports = docker.ports;
     if (docker.volumes !== undefined) env.volumes = docker.volumes;
+    if (docker.initScript !== undefined) env.initScript = docker.initScript;
   }
 
   writeFileSync(filePath(slug), JSON.stringify(env, null, 2), "utf-8");
@@ -186,6 +191,7 @@ export function updateEnv(
   if (updates.baseImage !== undefined) env.baseImage = updates.baseImage;
   if (updates.ports !== undefined) env.ports = updates.ports;
   if (updates.volumes !== undefined) env.volumes = updates.volumes;
+  if (updates.initScript !== undefined) env.initScript = updates.initScript;
 
   // If slug changed, delete old file
   if (newSlug !== slug) {

@@ -284,6 +284,87 @@ export class ContainerManager {
   }
 
   /**
+   * Execute a command inside a running container asynchronously.
+   * Uses Bun.spawn for longer-running operations (like init scripts).
+   * Returns exit code and combined stdout+stderr output.
+   */
+  async execInContainerAsync(
+    containerId: string,
+    cmd: string[],
+    opts?: { timeout?: number; onOutput?: (line: string) => void },
+  ): Promise<{ exitCode: number; output: string }> {
+    const timeout = opts?.timeout ?? 120_000;
+    const dockerCmd = [
+      "docker", "exec",
+      containerId,
+      ...cmd,
+    ];
+
+    const proc = Bun.spawn(dockerCmd, {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    const lines: string[] = [];
+    const decoder = new TextDecoder();
+
+    // Read stdout
+    const stdoutReader = proc.stdout.getReader();
+    let stdoutBuffer = "";
+    const readStdout = (async () => {
+      try {
+        while (true) {
+          const { done, value } = await stdoutReader.read();
+          if (done) break;
+          stdoutBuffer += decoder.decode(value, { stream: true });
+          const parts = stdoutBuffer.split("\n");
+          stdoutBuffer = parts.pop() || "";
+          for (const line of parts) {
+            lines.push(line);
+            opts?.onOutput?.(line);
+          }
+        }
+        if (stdoutBuffer.trim()) {
+          lines.push(stdoutBuffer);
+          opts?.onOutput?.(stdoutBuffer);
+        }
+      } finally {
+        stdoutReader.releaseLock();
+      }
+    })();
+
+    // Read stderr
+    const stderrPromise = new Response(proc.stderr).text();
+
+    // Apply timeout
+    const exitPromise = proc.exited;
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => {
+        proc.kill();
+        reject(new Error(`Command timed out after ${timeout}ms`));
+      }, timeout),
+    );
+
+    try {
+      const exitCode = await Promise.race([exitPromise, timeoutPromise]);
+      await readStdout;
+      const stderrText = await stderrPromise;
+      if (stderrText.trim()) {
+        for (const line of stderrText.split("\n")) {
+          if (line.trim()) {
+            lines.push(line);
+            opts?.onOutput?.(line);
+          }
+        }
+      }
+      return { exitCode, output: lines.join("\n") };
+    } catch (e) {
+      await readStdout.catch(() => {});
+      throw e;
+    }
+  }
+
+  /**
    * Re-track a container under a new key (e.g. when the real sessionId
    * is assigned after container creation).
    */

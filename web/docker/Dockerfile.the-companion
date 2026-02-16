@@ -1,0 +1,130 @@
+# The Companion — comprehensive development image
+# Ships with many languages, runtimes, and tools pre-installed so Claude Code
+# can work on any project out of the box.
+#
+# Build:  docker build -t the-companion:latest -f Dockerfile.the-companion .
+# Usage:  Automatically used by The Companion when creating containerized sessions
+
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
+# ── Layer 1: System packages ──────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl wget git make jq ca-certificates gnupg lsb-release \
+    build-essential cmake \
+    openssh-client \
+    sqlite3 libsqlite3-dev \
+    ffmpeg \
+    imagemagick \
+    unzip zip xz-utils \
+    software-properties-common \
+    python3 python3-pip python3-venv python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Layer 2: PHP 8.4 + Composer ──────────────────────────────────────────────
+RUN add-apt-repository ppa:ondrej/php -y \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    php8.4-cli php8.4-common php8.4-curl php8.4-mbstring php8.4-xml php8.4-zip \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
+# ── Layer 3: R ────────────────────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    r-base \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Layer 4: Java 11 + Maven + Gradle ────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openjdk-11-jdk maven gradle \
+    && rm -rf /var/lib/apt/lists/*
+ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+
+# ── Layer 5: .NET 8 SDK ──────────────────────────────────────────────────────
+RUN wget -q https://dot.net/v1/dotnet-install.sh -O /tmp/dotnet-install.sh \
+    && chmod +x /tmp/dotnet-install.sh \
+    && /tmp/dotnet-install.sh --channel 8.0 --install-dir /usr/share/dotnet \
+    && ln -s /usr/share/dotnet/dotnet /usr/local/bin/dotnet \
+    && rm /tmp/dotnet-install.sh
+ENV DOTNET_ROOT=/usr/share/dotnet
+
+# ── Layer 6: Erlang + Elixir ─────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    erlang elixir \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Layer 7: Node.js via nvm (20, 22, 24) ────────────────────────────────────
+ENV NVM_DIR=/root/.nvm
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash \
+    && . "$NVM_DIR/nvm.sh" \
+    && nvm install 20 \
+    && nvm install 22 \
+    && nvm install 24 \
+    && nvm alias default 22 \
+    && nvm use default \
+    && npm install -g pnpm
+# Ensure node/npm are on PATH for non-interactive shells
+ENV PATH="$NVM_DIR/versions/node/v22.14.0/bin:$PATH"
+
+# ── Layer 8: Bun ─────────────────────────────────────────────────────────────
+RUN curl -fsSL https://bun.sh/install | bash
+ENV BUN_INSTALL="/root/.bun"
+ENV PATH="$BUN_INSTALL/bin:$PATH"
+
+# ── Layer 9: Deno ─────────────────────────────────────────────────────────────
+RUN curl -fsSL https://deno.land/install.sh | sh
+ENV DENO_INSTALL="/root/.deno"
+ENV PATH="$DENO_INSTALL/bin:$PATH"
+
+# ── Layer 10: Go 1.23 ─────────────────────────────────────────────────────────
+RUN ARCH=$(dpkg --print-architecture) \
+    && wget -q "https://go.dev/dl/go1.23.6.linux-${ARCH}.tar.gz" -O /tmp/go.tar.gz \
+    && tar -C /usr/local -xzf /tmp/go.tar.gz \
+    && rm /tmp/go.tar.gz
+ENV GOROOT=/usr/local/go
+ENV GOPATH=/root/go
+ENV PATH="$GOPATH/bin:$GOROOT/bin:$PATH"
+
+# ── Layer 11: Rust (rustup + cargo) ──────────────────────────────────────────
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:$PATH"
+
+# ── Layer 12: Kotlin 2.1 ─────────────────────────────────────────────────────
+RUN curl -fsSL "https://github.com/JetBrains/kotlin/releases/download/v2.1.0/kotlin-compiler-2.1.0.zip" -o /tmp/kotlin.zip \
+    && unzip -q /tmp/kotlin.zip -d /opt \
+    && rm /tmp/kotlin.zip
+ENV PATH="/opt/kotlinc/bin:$PATH"
+
+# ── Layer 13: Scala + sbt ────────────────────────────────────────────────────
+RUN curl -fsSL "https://github.com/sbt/sbt/releases/download/v1.10.7/sbt-1.10.7.tgz" -o /tmp/sbt.tgz \
+    && tar -xzf /tmp/sbt.tgz -C /opt \
+    && rm /tmp/sbt.tgz
+ENV PATH="/opt/sbt/bin:$PATH"
+
+# ── Layer 14: Docker CLI ─────────────────────────────────────────────────────
+RUN ARCH=$(uname -m) \
+    && if [ "$ARCH" = "aarch64" ]; then ARCH="aarch64"; fi \
+    && curl -fsSL "https://download.docker.com/linux/static/stable/${ARCH}/docker-27.5.1.tgz" \
+    | tar xz --strip-components=1 -C /usr/local/bin docker/docker
+
+# ── Layer 15: GitHub CLI ─────────────────────────────────────────────────────
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && apt-get update && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Layer 16: Claude Code CLI ────────────────────────────────────────────────
+RUN . "$NVM_DIR/nvm.sh" && npm install -g @anthropic-ai/claude-code
+
+# ── Layer 17: Python tooling (poetry, uv) ────────────────────────────────────
+RUN pip install --break-system-packages poetry uv
+
+# ── Workspace ─────────────────────────────────────────────────────────────────
+WORKDIR /workspace
+
+# Keep container alive (overridden by docker exec from the host)
+CMD ["sleep", "infinity"]
