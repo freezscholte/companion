@@ -431,7 +431,7 @@ export class CliLauncher {
       // Ensure CLAUDECODE is unset inside container
       dockerArgs.push("-e", "CLAUDECODE=");
 
-      dockerArgs.push(options.containerName || options.containerId!);
+      dockerArgs.push(options.containerId!);
       // Use a login shell so ~/.bashrc is sourced and nvm/bun/deno/etc are on PATH
       const innerCmd = [binary, ...args].map(a => `'${a.replace(/'/g, "'\\''")}'`).join(" ");
       dockerArgs.push("bash", "-lc", innerCmd);
@@ -579,7 +579,7 @@ export class CliLauncher {
         }
       }
       dockerArgs.push("-e", "CLAUDECODE=");
-      dockerArgs.push(options.containerName || options.containerId!);
+      dockerArgs.push(options.containerId!);
       // Use a login shell so ~/.bashrc is sourced and nvm/bun/deno/etc are on PATH
       const innerCmd = [binary, ...args].map(a => `'${a.replace(/'/g, "'\\''")}'`).join(" ");
       dockerArgs.push("bash", "-lc", innerCmd);

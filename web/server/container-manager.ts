@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -275,6 +276,7 @@ export class ContainerManager {
    * Returns the stdout output. Throws on failure.
    */
   execInContainer(containerId: string, cmd: string[], timeout = STANDARD_EXEC_TIMEOUT_MS): string {
+    validateContainerId(containerId);
     const dockerCmd = [
       "docker", "exec",
       shellEscape(containerId),
@@ -293,6 +295,7 @@ export class ContainerManager {
     cmd: string[],
     opts?: { timeout?: number; onOutput?: (line: string) => void },
   ): Promise<{ exitCode: number; output: string }> {
+    validateContainerId(containerId);
     const timeout = opts?.timeout ?? 120_000;
     const dockerCmd = [
       "docker", "exec",
@@ -336,17 +339,19 @@ export class ContainerManager {
     // Read stderr
     const stderrPromise = new Response(proc.stderr).text();
 
-    // Apply timeout
+    // Apply timeout — capture timer ID so we can clear it on normal exit
     const exitPromise = proc.exited;
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
         proc.kill();
         reject(new Error(`Command timed out after ${timeout}ms`));
-      }, timeout),
-    );
+      }, timeout);
+    });
 
     try {
       const exitCode = await Promise.race([exitPromise, timeoutPromise]);
+      clearTimeout(timeoutId!);
       await readStdout;
       const stderrText = await stderrPromise;
       if (stderrText.trim()) {
@@ -359,6 +364,7 @@ export class ContainerManager {
       }
       return { exitCode, output: lines.join("\n") };
     } catch (e) {
+      clearTimeout(timeoutId!);
       await readStdout.catch(() => {});
       throw e;
     }
@@ -410,6 +416,7 @@ export class ContainerManager {
 
   /** Attempt to start a stopped container. Throws on failure. */
   startContainer(containerId: string): void {
+    validateContainerId(containerId);
     exec(`docker start ${shellEscape(containerId)}`, {
       encoding: "utf-8",
       timeout: CONTAINER_BOOT_TIMEOUT_MS,
@@ -421,6 +428,7 @@ export class ContainerManager {
    * Returns "running", "stopped", or "missing".
    */
   isContainerAlive(containerId: string): "running" | "stopped" | "missing" {
+    validateContainerId(containerId);
     try {
       const state = exec(
         `docker inspect --format '{{.State.Running}}' ${shellEscape(containerId)}`,
@@ -437,6 +445,7 @@ export class ContainerManager {
    * Uses `bash -lc` so PATH includes nvm/bun/deno/etc.
    */
   hasBinaryInContainer(containerId: string, binary: string): boolean {
+    validateContainerId(containerId);
     try {
       exec(
         `docker exec ${shellEscape(containerId)} bash -lc 'which ${shellEscape(binary)}'`,
@@ -562,68 +571,78 @@ export class ContainerManager {
     const dockerfilePath = join(buildDir, "Dockerfile");
     writeFileSync(dockerfilePath, dockerfileContent, "utf-8");
 
-    const args = [
-      "docker", "build",
-      "-t", tag,
-      "-f", dockerfilePath,
-      buildDir,
-    ];
-
-    const proc = Bun.spawn(args, {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
-    const lines: string[] = [];
-
-    // Read stdout line by line
-    const reader = proc.stdout.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
     try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n");
-        buffer = parts.pop() || "";
-        for (const line of parts) {
-          if (line.trim()) {
-            lines.push(line);
-            onProgress?.(line);
+      const args = [
+        "docker", "build",
+        "-t", tag,
+        "-f", dockerfilePath,
+        buildDir,
+      ];
+
+      const proc = Bun.spawn(args, {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      const lines: string[] = [];
+
+      // Read stdout and stderr concurrently to avoid deadlock.
+      // Docker BuildKit sends build progress to stderr; if we read them
+      // sequentially, the stderr pipe buffer fills up and blocks Docker
+      // while we're still waiting on stdout.
+      const readStdout = (async () => {
+        const reader = proc.stdout.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const parts = buffer.split("\n");
+            buffer = parts.pop() || "";
+            for (const line of parts) {
+              if (line.trim()) {
+                lines.push(line);
+                onProgress?.(line);
+              }
+            }
+          }
+          if (buffer.trim()) {
+            lines.push(buffer);
+            onProgress?.(buffer);
+          }
+        } finally {
+          reader.releaseLock();
+        }
+      })();
+
+      const readStderr = (async () => {
+        const text = await new Response(proc.stderr).text();
+        if (text.trim()) {
+          for (const line of text.split("\n")) {
+            if (line.trim()) {
+              lines.push(line);
+              onProgress?.(line);
+            }
           }
         }
+      })();
+
+      await Promise.all([readStdout, readStderr]);
+      const exitCode = await proc.exited;
+      const log = lines.join("\n");
+
+      if (exitCode === 0) {
+        console.log(`[container-manager] Built image ${tag} (streaming)`);
+        return { success: true, log };
       }
-      // Flush remaining buffer
-      if (buffer.trim()) {
-        lines.push(buffer);
-        onProgress?.(buffer);
-      }
+
+      return { success: false, log };
     } finally {
-      reader.releaseLock();
+      // Clean up temp build directory
+      try { rmSync(buildDir, { recursive: true, force: true }); } catch { /* ignore */ }
     }
-
-    // Also capture stderr
-    const stderrText = await new Response(proc.stderr).text();
-    if (stderrText.trim()) {
-      for (const line of stderrText.split("\n")) {
-        if (line.trim()) {
-          lines.push(line);
-          onProgress?.(line);
-        }
-      }
-    }
-
-    const exitCode = await proc.exited;
-    const log = lines.join("\n");
-
-    if (exitCode === 0) {
-      console.log(`[container-manager] Built image ${tag} (streaming)`);
-      return { success: true, log };
-    }
-
-    return { success: false, log };
   }
 
   /** Clean up all tracked containers (e.g. on server shutdown). */
@@ -641,6 +660,15 @@ export class ContainerManager {
 function shellEscape(s: string): string {
   if (/^[a-zA-Z0-9._\-/:=@]+$/.test(s)) return s;
   return `'${s.replace(/'/g, "'\\''")}'`;
+}
+
+/** Validate that a container ID is a hex string (Docker format) or a safe container name. */
+function validateContainerId(id: string): void {
+  // Docker container IDs are 64-char hex, but we accept short IDs too.
+  // Container names are alphanumeric with hyphens and underscores.
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_.\-]*$/.test(id)) {
+    throw new Error(`Invalid container ID or name: ${id.slice(0, 40)}`);
+  }
 }
 
 // Singleton

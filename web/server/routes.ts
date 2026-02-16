@@ -117,6 +117,11 @@ export function createRoutes(
       let cwd = body.cwd;
       let worktreeInfo: { isWorktree: boolean; repoRoot: string; branch: string; actualBranch: string; worktreePath: string } | undefined;
 
+      // Validate branch name to prevent command injection via shell metacharacters
+      if (body.branch && !/^[a-zA-Z0-9/_.\-]+$/.test(body.branch)) {
+        return c.json({ error: "Invalid branch name" }, 400);
+      }
+
       if (body.useWorktree && body.branch && cwd) {
         // Worktree isolation: create/reuse a worktree for the selected branch
         const repoInfo = gitUtils.getRepoInfo(cwd);
@@ -157,7 +162,7 @@ export function createRoutes(
 
       // Resolve Docker image from environment or explicit container config
       const companionEnv = body.envSlug ? envManager.getEnv(body.envSlug) : null;
-      const effectiveImage = companionEnv
+      let effectiveImage = companionEnv
         ? (body.envSlug ? envManager.getEffectiveImage(body.envSlug) : null)
         : (body.container?.image || null);
 
@@ -187,8 +192,7 @@ export function createRoutes(
             // Try fallback: if the-companion requested but companion-dev exists, use it
             if (effectiveImage === "the-companion:latest" && containerManager.imageExists("companion-dev:latest")) {
               console.warn("[routes] the-companion:latest not found, falling back to companion-dev:latest (deprecated)");
-              // Update effectiveImage for this session to use the fallback
-              // (the variable is let-bound above, but we shadow it here since it's used below)
+              effectiveImage = "companion-dev:latest";
             } else {
               // Determine which Dockerfile to build
               const dockerfileName = effectiveImage === "the-companion:latest"
