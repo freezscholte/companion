@@ -361,7 +361,7 @@ export class ContainerManager {
           // Mark /workspace as safe — the workspace volume may be owned by a
           // different uid (e.g. ubuntu) than the container user (root), which
           // triggers git's "dubious ownership" check.
-          "git config --global --add safe.directory /workspace 2>/dev/null",
+          "git config --global safe.directory /workspace 2>/dev/null",
           // Rewrite git@github.com:org/repo → https://github.com/org/repo for all remotes
           "cd /workspace 2>/dev/null && " +
             "git remote -v 2>/dev/null | grep 'git@github.com:' | awk '{print $1}' | sort -u | " +
