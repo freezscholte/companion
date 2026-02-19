@@ -100,8 +100,8 @@ describe("HomePage", () => {
     // update the branch picker to Linear's recommended branch.
     render(<HomePage />);
 
-    const issueTitle = await screen.findByText(/THE-147/i);
-    fireEvent.click(issueTitle.closest("button")!);
+    const issueButton = await screen.findByRole("button", { name: /THE-147/i });
+    fireEvent.click(issueButton);
 
     await waitFor(() => {
       expect(screen.getByText("the-147-associer-un-ticket-linear")).toBeInTheDocument();
