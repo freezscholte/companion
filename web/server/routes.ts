@@ -1471,9 +1471,9 @@ export function createRoutes(
     });
   });
 
-  // ─── Linear teams ───────────────────────────────────────────────────
+  // ─── Linear projects ────────────────────────────────────────────────
 
-  api.get("/linear/teams", async (c) => {
+  api.get("/linear/projects", async (c) => {
     const settings = getSettings();
     const linearApiKey = settings.linearApiKey.trim();
     if (!linearApiKey) {
@@ -1488,9 +1488,9 @@ export function createRoutes(
       },
       body: JSON.stringify({
         query: `
-          query CompanionListTeams {
-            teams(first: 50, orderBy: updatedAt) {
-              nodes { id key name }
+          query CompanionListProjects {
+            projects(first: 50, orderBy: updatedAt) {
+              nodes { id name state }
             }
           }
         `,
@@ -1501,7 +1501,7 @@ export function createRoutes(
 
     const json = await response.json().catch(() => ({})) as {
       data?: {
-        teams?: { nodes?: Array<{ id?: string; key?: string | null; name?: string | null }> } | null;
+        projects?: { nodes?: Array<{ id?: string; name?: string | null; state?: string | null }> } | null;
       };
       errors?: Array<{ message?: string }>;
     };
@@ -1511,22 +1511,22 @@ export function createRoutes(
       return c.json({ error: firstError }, 502);
     }
 
-    const teams = (json.data?.teams?.nodes || []).map((t) => ({
-      id: t.id || "",
-      key: t.key || "",
-      name: t.name || "",
+    const projects = (json.data?.projects?.nodes || []).map((p) => ({
+      id: p.id || "",
+      name: p.name || "",
+      state: p.state || "",
     }));
 
-    return c.json({ teams });
+    return c.json({ projects });
   });
 
-  // ─── Linear team issues (recent, non-done) ────────────────────────
+  // ─── Linear project issues (recent, non-done) ─────────────────────
 
-  api.get("/linear/team-issues", async (c) => {
-    const teamId = (c.req.query("teamId") || "").trim();
+  api.get("/linear/project-issues", async (c) => {
+    const projectId = (c.req.query("projectId") || "").trim();
     const limitRaw = Number(c.req.query("limit") || "15");
     const limit = Math.min(50, Math.max(1, Number.isFinite(limitRaw) ? Math.floor(limitRaw) : 15));
-    if (!teamId) return c.json({ error: "teamId is required" }, 400);
+    if (!projectId) return c.json({ error: "projectId is required" }, 400);
 
     const settings = getSettings();
     const linearApiKey = settings.linearApiKey.trim();
@@ -1542,10 +1542,10 @@ export function createRoutes(
       },
       body: JSON.stringify({
         query: `
-          query CompanionTeamIssues($teamId: String!, $first: Int!) {
+          query CompanionProjectIssues($projectId: ID!, $first: Int!) {
             issues(
               filter: {
-                team: { id: { eq: $teamId } }
+                project: { id: { eq: $projectId } }
                 state: { type: { nin: ["completed", "cancelled"] } }
               }
               orderBy: updatedAt
@@ -1566,7 +1566,7 @@ export function createRoutes(
             }
           }
         `,
-        variables: { teamId, first: limit },
+        variables: { projectId, first: limit },
       }),
     }).catch((e: unknown) => {
       throw new Error(`Failed to connect to Linear: ${e instanceof Error ? e.message : String(e)}`);
@@ -1629,17 +1629,15 @@ export function createRoutes(
   api.put("/linear/project-mappings", async (c) => {
     const body = await c.req.json().catch(() => ({})) as {
       repoRoot?: string;
-      teamId?: string;
-      teamKey?: string;
-      teamName?: string;
+      projectId?: string;
+      projectName?: string;
     };
-    if (!body.repoRoot || !body.teamId || !body.teamKey || !body.teamName) {
-      return c.json({ error: "repoRoot, teamId, teamKey, and teamName are required" }, 400);
+    if (!body.repoRoot || !body.projectId || !body.projectName) {
+      return c.json({ error: "repoRoot, projectId, and projectName are required" }, 400);
     }
     const mapping = linearProjectManager.upsertMapping(body.repoRoot, {
-      teamId: body.teamId,
-      teamKey: body.teamKey,
-      teamName: body.teamName,
+      projectId: body.projectId,
+      projectName: body.projectName,
     });
     return c.json({ mapping });
   });

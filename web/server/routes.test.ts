@@ -75,7 +75,7 @@ vi.mock("./settings-manager.js", () => ({
 vi.mock("./linear-project-manager.js", () => ({
   listMappings: vi.fn(() => []),
   getMapping: vi.fn(() => null),
-  upsertMapping: vi.fn((repoRoot: string, data: { teamId: string; teamKey: string; teamName: string }) => ({
+  upsertMapping: vi.fn((repoRoot: string, data: { projectId: string; projectName: string }) => ({
     repoRoot,
     ...data,
     createdAt: Date.now(),
@@ -1488,9 +1488,9 @@ describe("GET /api/linear/connection", () => {
   });
 });
 
-// ─── Linear teams ────────────────────────────────────────────────────────────
+// ─── Linear projects ─────────────────────────────────────────────────────────
 
-describe("GET /api/linear/teams", () => {
+describe("GET /api/linear/projects", () => {
   it("returns 400 when linear key is not configured", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       openrouterApiKey: "",
@@ -1499,13 +1499,13 @@ describe("GET /api/linear/teams", () => {
       updatedAt: 0,
     });
 
-    const res = await app.request("/api/linear/teams", { method: "GET" });
+    const res = await app.request("/api/linear/projects", { method: "GET" });
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json).toEqual({ error: "Linear API key is not configured" });
   });
 
-  it("returns team list from Linear API", async () => {
+  it("returns project list from Linear API", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       openrouterApiKey: "",
       openrouterModel: "openrouter/free",
@@ -1518,10 +1518,10 @@ describe("GET /api/linear/teams", () => {
       statusText: "OK",
       json: async () => ({
         data: {
-          teams: {
+          projects: {
             nodes: [
-              { id: "t1", key: "ENG", name: "Engineering" },
-              { id: "t2", key: "DES", name: "Design" },
+              { id: "p1", name: "My Feature", state: "started" },
+              { id: "p2", name: "Backend Rework", state: "planned" },
             ],
           },
         },
@@ -1529,25 +1529,25 @@ describe("GET /api/linear/teams", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const res = await app.request("/api/linear/teams", { method: "GET" });
+    const res = await app.request("/api/linear/projects", { method: "GET" });
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toEqual({
-      teams: [
-        { id: "t1", key: "ENG", name: "Engineering" },
-        { id: "t2", key: "DES", name: "Design" },
+      projects: [
+        { id: "p1", name: "My Feature", state: "started" },
+        { id: "p2", name: "Backend Rework", state: "planned" },
       ],
     });
     vi.unstubAllGlobals();
   });
 });
 
-describe("GET /api/linear/team-issues", () => {
-  it("returns 400 when teamId is missing", async () => {
-    const res = await app.request("/api/linear/team-issues", { method: "GET" });
+describe("GET /api/linear/project-issues", () => {
+  it("returns 400 when projectId is missing", async () => {
+    const res = await app.request("/api/linear/project-issues", { method: "GET" });
     expect(res.status).toBe(400);
     const json = await res.json();
-    expect(json).toEqual({ error: "teamId is required" });
+    expect(json).toEqual({ error: "projectId is required" });
   });
 
   it("returns 400 when linear key is not configured", async () => {
@@ -1558,13 +1558,13 @@ describe("GET /api/linear/team-issues", () => {
       updatedAt: 0,
     });
 
-    const res = await app.request("/api/linear/team-issues?teamId=t1", { method: "GET" });
+    const res = await app.request("/api/linear/project-issues?projectId=p1", { method: "GET" });
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json).toEqual({ error: "Linear API key is not configured" });
   });
 
-  it("returns recent non-done issues for a team", async () => {
+  it("returns recent non-done issues for a project", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       openrouterApiKey: "",
       openrouterModel: "openrouter/free",
@@ -1596,7 +1596,7 @@ describe("GET /api/linear/team-issues", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const res = await app.request("/api/linear/team-issues?teamId=t1&limit=5", { method: "GET" });
+    const res = await app.request("/api/linear/project-issues?projectId=p1&limit=5", { method: "GET" });
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toEqual({
@@ -1616,10 +1616,10 @@ describe("GET /api/linear/team-issues", () => {
       }],
     });
 
-    // Verify the GraphQL query filters out completed/cancelled and orders by updatedAt
+    // Verify the GraphQL query uses projectId variable and correct limit
     const [, requestInit] = vi.mocked(fetchMock).mock.calls[0];
     const requestBody = JSON.parse(String(requestInit?.body ?? "{}"));
-    expect(requestBody.variables).toEqual({ teamId: "t1", first: 5 });
+    expect(requestBody.variables).toEqual({ projectId: "p1", first: 5 });
     vi.unstubAllGlobals();
   });
 });
@@ -1630,9 +1630,8 @@ describe("GET /api/linear/project-mappings", () => {
   it("returns mapping for a specific repoRoot", async () => {
     const mockMapping = {
       repoRoot: "/home/user/project",
-      teamId: "t1",
-      teamKey: "ENG",
-      teamName: "Engineering",
+      projectId: "p1",
+      projectName: "My Feature",
       createdAt: 1000,
       updatedAt: 1000,
     };
@@ -1662,8 +1661,8 @@ describe("GET /api/linear/project-mappings", () => {
 
   it("returns all mappings when no repoRoot specified", async () => {
     const mockMappings = [
-      { repoRoot: "/repo-a", teamId: "t1", teamKey: "ENG", teamName: "Engineering", createdAt: 1000, updatedAt: 1000 },
-      { repoRoot: "/repo-b", teamId: "t2", teamKey: "DES", teamName: "Design", createdAt: 2000, updatedAt: 2000 },
+      { repoRoot: "/repo-a", projectId: "p1", projectName: "My Feature", createdAt: 1000, updatedAt: 1000 },
+      { repoRoot: "/repo-b", projectId: "p2", projectName: "Backend Rework", createdAt: 2000, updatedAt: 2000 },
     ];
     vi.mocked(linearProjectManager.listMappings).mockReturnValue(mockMappings);
 
@@ -1683,7 +1682,7 @@ describe("PUT /api/linear/project-mappings", () => {
     });
     expect(res.status).toBe(400);
     const json = await res.json();
-    expect(json).toEqual({ error: "repoRoot, teamId, teamKey, and teamName are required" });
+    expect(json).toEqual({ error: "repoRoot, projectId, and projectName are required" });
   });
 
   it("creates a mapping successfully", async () => {
@@ -1692,19 +1691,18 @@ describe("PUT /api/linear/project-mappings", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         repoRoot: "/home/user/project",
-        teamId: "t1",
-        teamKey: "ENG",
-        teamName: "Engineering",
+        projectId: "p1",
+        projectName: "My Feature",
       }),
     });
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.mapping).toBeDefined();
     expect(json.mapping.repoRoot).toBe("/home/user/project");
-    expect(json.mapping.teamKey).toBe("ENG");
+    expect(json.mapping.projectName).toBe("My Feature");
     expect(linearProjectManager.upsertMapping).toHaveBeenCalledWith(
       "/home/user/project",
-      { teamId: "t1", teamKey: "ENG", teamName: "Engineering" },
+      { projectId: "p1", projectName: "My Feature" },
     );
   });
 });

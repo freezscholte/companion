@@ -10,12 +10,10 @@ import { homedir } from "node:os";
 export interface LinearProjectMapping {
   /** Normalized git repo root path (the key) */
   repoRoot: string;
-  /** Linear team UUID */
-  teamId: string;
-  /** Human-readable team key, e.g. "ENG" */
-  teamKey: string;
-  /** Human-readable team name, e.g. "Engineering" */
-  teamName: string;
+  /** Linear project UUID */
+  projectId: string;
+  /** Human-readable project name */
+  projectName: string;
   /** When the mapping was created */
   createdAt: number;
   /** When the mapping was last updated */
@@ -43,7 +41,7 @@ function ensureLoaded(): void {
             typeof m === "object" &&
             m !== null &&
             typeof (m as LinearProjectMapping).repoRoot === "string" &&
-            typeof (m as LinearProjectMapping).teamId === "string",
+            typeof (m as LinearProjectMapping).projectId === "string",
         );
       } else {
         mappings = [];
@@ -73,23 +71,21 @@ export function getMapping(repoRoot: string): LinearProjectMapping | null {
 
 export function upsertMapping(
   repoRoot: string,
-  data: { teamId: string; teamKey: string; teamName: string },
+  data: { projectId: string; projectName: string },
 ): LinearProjectMapping {
   ensureLoaded();
   const key = normalizeRoot(repoRoot);
   const now = Date.now();
   const existing = mappings.find((m) => m.repoRoot === key);
   if (existing) {
-    existing.teamId = data.teamId;
-    existing.teamKey = data.teamKey;
-    existing.teamName = data.teamName;
+    existing.projectId = data.projectId;
+    existing.projectName = data.projectName;
     existing.updatedAt = now;
   } else {
     mappings.push({
       repoRoot: key,
-      teamId: data.teamId,
-      teamKey: data.teamKey,
-      teamName: data.teamName,
+      projectId: data.projectId,
+      projectName: data.projectName,
       createdAt: now,
       updatedAt: now,
     });

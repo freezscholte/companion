@@ -34,37 +34,31 @@ describe("linear-project-manager", () => {
 
   it("upsert creates a new mapping", () => {
     const mapping = upsertMapping("/home/user/project", {
-      teamId: "team-uuid-1",
-      teamKey: "ENG",
-      teamName: "Engineering",
+      projectId: "proj-uuid-1",
+      projectName: "My Feature",
     });
 
     expect(mapping.repoRoot).toBe("/home/user/project");
-    expect(mapping.teamId).toBe("team-uuid-1");
-    expect(mapping.teamKey).toBe("ENG");
-    expect(mapping.teamName).toBe("Engineering");
+    expect(mapping.projectId).toBe("proj-uuid-1");
+    expect(mapping.projectName).toBe("My Feature");
     expect(mapping.createdAt).toBeGreaterThan(0);
     expect(mapping.updatedAt).toBe(mapping.createdAt);
   });
 
   it("upsert updates an existing mapping", () => {
     const first = upsertMapping("/home/user/project", {
-      teamId: "team-uuid-1",
-      teamKey: "ENG",
-      teamName: "Engineering",
+      projectId: "proj-uuid-1",
+      projectName: "My Feature",
     });
 
-    // Small delay to ensure updatedAt differs
     const second = upsertMapping("/home/user/project", {
-      teamId: "team-uuid-2",
-      teamKey: "DES",
-      teamName: "Design",
+      projectId: "proj-uuid-2",
+      projectName: "New Feature",
     });
 
     expect(second.repoRoot).toBe("/home/user/project");
-    expect(second.teamId).toBe("team-uuid-2");
-    expect(second.teamKey).toBe("DES");
-    expect(second.teamName).toBe("Design");
+    expect(second.projectId).toBe("proj-uuid-2");
+    expect(second.projectName).toBe("New Feature");
     // createdAt should be preserved from the first mapping
     expect(second.createdAt).toBe(first.createdAt);
     expect(second.updatedAt).toBeGreaterThanOrEqual(first.updatedAt);
@@ -75,21 +69,19 @@ describe("linear-project-manager", () => {
 
   it("getMapping retrieves a stored mapping", () => {
     upsertMapping("/home/user/project", {
-      teamId: "team-uuid-1",
-      teamKey: "ENG",
-      teamName: "Engineering",
+      projectId: "proj-uuid-1",
+      projectName: "My Feature",
     });
 
     const mapping = getMapping("/home/user/project");
     expect(mapping).not.toBeNull();
-    expect(mapping!.teamKey).toBe("ENG");
+    expect(mapping!.projectName).toBe("My Feature");
   });
 
   it("removeMapping deletes an entry and returns true", () => {
     upsertMapping("/home/user/project", {
-      teamId: "team-uuid-1",
-      teamKey: "ENG",
-      teamName: "Engineering",
+      projectId: "proj-uuid-1",
+      projectName: "My Feature",
     });
 
     expect(removeMapping("/home/user/project")).toBe(true);
@@ -103,9 +95,8 @@ describe("linear-project-manager", () => {
 
   it("normalizes trailing slashes on repoRoot", () => {
     upsertMapping("/home/user/project/", {
-      teamId: "team-uuid-1",
-      teamKey: "ENG",
-      teamName: "Engineering",
+      projectId: "proj-uuid-1",
+      projectName: "My Feature",
     });
 
     // Should find it without trailing slash
@@ -119,21 +110,20 @@ describe("linear-project-manager", () => {
 
   it("persists to disk and survives reload", () => {
     upsertMapping("/home/user/project", {
-      teamId: "team-uuid-1",
-      teamKey: "ENG",
-      teamName: "Engineering",
+      projectId: "proj-uuid-1",
+      projectName: "My Feature",
     });
 
     // Verify file written to disk
     const raw = JSON.parse(readFileSync(filePath, "utf-8"));
     expect(raw).toHaveLength(1);
-    expect(raw[0].teamKey).toBe("ENG");
+    expect(raw[0].projectName).toBe("My Feature");
 
     // Reset and reload from disk
     _resetForTest(filePath);
     const mapping = getMapping("/home/user/project");
     expect(mapping).not.toBeNull();
-    expect(mapping!.teamKey).toBe("ENG");
+    expect(mapping!.projectName).toBe("My Feature");
   });
 
   it("handles corrupt JSON file gracefully", () => {
@@ -152,23 +142,21 @@ describe("linear-project-manager", () => {
 
   it("manages multiple mappings", () => {
     upsertMapping("/repo/alpha", {
-      teamId: "t1",
-      teamKey: "ALPHA",
-      teamName: "Alpha Team",
+      projectId: "p1",
+      projectName: "Alpha Project",
     });
     upsertMapping("/repo/beta", {
-      teamId: "t2",
-      teamKey: "BETA",
-      teamName: "Beta Team",
+      projectId: "p2",
+      projectName: "Beta Project",
     });
 
     expect(listMappings()).toHaveLength(2);
-    expect(getMapping("/repo/alpha")!.teamKey).toBe("ALPHA");
-    expect(getMapping("/repo/beta")!.teamKey).toBe("BETA");
+    expect(getMapping("/repo/alpha")!.projectName).toBe("Alpha Project");
+    expect(getMapping("/repo/beta")!.projectName).toBe("Beta Project");
 
     removeMapping("/repo/alpha");
     expect(listMappings()).toHaveLength(1);
     expect(getMapping("/repo/alpha")).toBeNull();
-    expect(getMapping("/repo/beta")!.teamKey).toBe("BETA");
+    expect(getMapping("/repo/beta")!.projectName).toBe("Beta Project");
   });
 });

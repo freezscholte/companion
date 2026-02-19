@@ -336,17 +336,16 @@ export interface LinearConnectionInfo {
   teamKey: string;
 }
 
-export interface LinearTeam {
+export interface LinearProject {
   id: string;
-  key: string;
   name: string;
+  state: string;
 }
 
 export interface LinearProjectMapping {
   repoRoot: string;
-  teamId: string;
-  teamKey: string;
-  teamName: string;
+  projectId: string;
+  projectName: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -573,10 +572,10 @@ export const api = {
       `/linear/issues?query=${encodeURIComponent(query)}&limit=${encodeURIComponent(String(limit))}`,
     ),
   getLinearConnection: () => get<LinearConnectionInfo>("/linear/connection"),
-  listLinearTeams: () => get<{ teams: LinearTeam[] }>("/linear/teams"),
-  getLinearTeamIssues: (teamId: string, limit = 15) =>
+  listLinearProjects: () => get<{ projects: LinearProject[] }>("/linear/projects"),
+  getLinearProjectIssues: (projectId: string, limit = 15) =>
     get<{ issues: LinearIssue[] }>(
-      `/linear/team-issues?teamId=${encodeURIComponent(teamId)}&limit=${encodeURIComponent(String(limit))}`,
+      `/linear/project-issues?projectId=${encodeURIComponent(projectId)}&limit=${encodeURIComponent(String(limit))}`,
     ),
   getLinearProjectMapping: (repoRoot: string) =>
     get<{ mapping: LinearProjectMapping | null }>(
@@ -584,9 +583,8 @@ export const api = {
     ),
   upsertLinearProjectMapping: (data: {
     repoRoot: string;
-    teamId: string;
-    teamKey: string;
-    teamName: string;
+    projectId: string;
+    projectName: string;
   }) => put<{ mapping: LinearProjectMapping }>("/linear/project-mappings", data),
   removeLinearProjectMapping: (repoRoot: string) =>
     del<{ ok: boolean }>("/linear/project-mappings", { repoRoot }),
