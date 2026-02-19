@@ -21,6 +21,8 @@ export interface StoredLinearIssue {
   stateType: string;
   teamName: string;
   teamKey: string;
+  assigneeName?: string;
+  updatedAt?: string;
 }
 
 // ─── Paths ───────────────────────────────────────────────────────────────────
