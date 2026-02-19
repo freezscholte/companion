@@ -278,7 +278,7 @@ describe("settings", () => {
   });
 
   it("searches Linear issues with query + limit", async () => {
-    const data = { issues: [{ id: "1", identifier: "ENG-1", title: "Fix", description: "", url: "", priorityLabel: "", stateName: "", stateType: "", teamName: "", teamKey: "", teamId: "" }] };
+    const data = { issues: [{ id: "1", identifier: "ENG-1", title: "Fix", description: "", url: "", branchName: "", priorityLabel: "", stateName: "", stateType: "", teamName: "", teamKey: "", teamId: "" }] };
     mockFetch.mockResolvedValueOnce(mockResponse(data));
 
     const result = await api.searchLinearIssues("auth bug", 5);
