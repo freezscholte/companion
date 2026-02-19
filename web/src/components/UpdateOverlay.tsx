@@ -132,6 +132,7 @@ function UpdateOverlayVisual({ phase, className }: { phase: Phase; className?: s
           {[0, 1, 2].map((i) => (
             <span
               key={i}
+              data-testid="progress-dot"
               className="w-1.5 h-1.5 rounded-full bg-cc-primary/50"
               style={{
                 animation: "pulse-dot 1.4s ease-in-out infinite",

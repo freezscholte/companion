@@ -107,7 +107,7 @@ describe("UpdateOverlay", () => {
   it("shows progress dots during non-ready phases", () => {
     const { container } = render(<UpdateOverlay active={true} />);
     // There should be 3 progress dots
-    const dots = container.querySelectorAll("span[style*='pulse-dot']");
+    const dots = container.querySelectorAll('[data-testid="progress-dot"]');
     expect(dots.length).toBe(3);
   });
 
@@ -124,7 +124,7 @@ describe("UpdateOverlay", () => {
       await vi.advanceTimersByTimeAsync(5100);
     });
 
-    const dots = container.querySelectorAll("span[style*='pulse-dot']");
+    const dots = container.querySelectorAll('[data-testid="progress-dot"]');
     expect(dots.length).toBe(0);
   });
 });
