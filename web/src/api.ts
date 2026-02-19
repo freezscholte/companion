@@ -324,6 +324,7 @@ export interface LinearIssue {
   stateType: string;
   teamName: string;
   teamKey: string;
+  teamId: string;
 }
 
 export interface LinearConnectionInfo {
@@ -556,6 +557,11 @@ export const api = {
       `/linear/issues?query=${encodeURIComponent(query)}&limit=${encodeURIComponent(String(limit))}`,
     ),
   getLinearConnection: () => get<LinearConnectionInfo>("/linear/connection"),
+  transitionLinearIssue: (issueId: string, teamId: string, currentStateType: string) =>
+    post<{ ok: boolean; skipped: boolean }>(
+      `/linear/issues/${encodeURIComponent(issueId)}/transition`,
+      { teamId, currentStateType },
+    ),
 
   // Git operations
   getRepoInfo: (path: string) =>

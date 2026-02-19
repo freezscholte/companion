@@ -1372,7 +1372,7 @@ export function createRoutes(
                 url
                 priorityLabel
                 state { name type }
-                team { key name }
+                team { id key name }
               }
             }
           }
@@ -1394,7 +1394,7 @@ export function createRoutes(
             url: string;
             priorityLabel?: string | null;
             state?: { name?: string | null; type?: string | null } | null;
-            team?: { key?: string | null; name?: string | null } | null;
+            team?: { id?: string | null; key?: string | null; name?: string | null } | null;
           }>;
         };
       };
@@ -1417,6 +1417,7 @@ export function createRoutes(
       stateType: issue.state?.type || "",
       teamName: issue.team?.name || "",
       teamKey: issue.team?.key || "",
+      teamId: issue.team?.id || "",
     }));
 
     return c.json({ issues });
@@ -1468,6 +1469,141 @@ export function createRoutes(
       teamName: firstTeam?.name || "",
       teamKey: firstTeam?.key || "",
     });
+  });
+
+  api.post("/linear/issues/:id/transition", async (c) => {
+    const issueId = c.req.param("id");
+    if (!issueId) {
+      return c.json({ error: "Issue ID is required" }, 400);
+    }
+
+    const body = await c.req.json().catch(() => ({})) as {
+      teamId?: string;
+      currentStateType?: string;
+    };
+
+    // Skip if issue is already in "started" or "completed" state
+    if (body.currentStateType === "started" || body.currentStateType === "completed") {
+      return c.json({ ok: true, skipped: true, reason: "already_in_progress_or_completed" });
+    }
+
+    const settings = getSettings();
+    const linearApiKey = settings.linearApiKey.trim();
+    if (!linearApiKey) {
+      return c.json({ error: "Linear API key is not configured" }, 400);
+    }
+
+    if (!body.teamId) {
+      return c.json({ error: "teamId is required" }, 400);
+    }
+
+    try {
+      // Query workflow states for this team to find the "started" type state
+      const statesResponse = await fetch("https://api.linear.app/graphql", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: linearApiKey,
+        },
+        body: JSON.stringify({
+          query: `
+            query CompanionTeamStates($teamId: String!) {
+              team(id: $teamId) {
+                states {
+                  nodes {
+                    id
+                    name
+                    type
+                  }
+                }
+              }
+            }
+          `,
+          variables: { teamId: body.teamId },
+        }),
+      });
+
+      const statesJson = await statesResponse.json().catch(() => ({})) as {
+        data?: {
+          team?: {
+            states?: {
+              nodes?: Array<{ id: string; name: string; type: string }>;
+            };
+          };
+        };
+        errors?: Array<{ message?: string }>;
+      };
+
+      if (!statesResponse.ok || (statesJson.errors && statesJson.errors.length > 0)) {
+        const errMsg = statesJson.errors?.[0]?.message || statesResponse.statusText || "Failed to fetch team states";
+        return c.json({ error: errMsg }, 502);
+      }
+
+      const states = statesJson.data?.team?.states?.nodes || [];
+      const startedState = states.find((s) => s.type === "started");
+
+      if (!startedState) {
+        return c.json({ ok: true, skipped: true, reason: "no_started_state_found" });
+      }
+
+      // Update the issue state
+      const updateResponse = await fetch("https://api.linear.app/graphql", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: linearApiKey,
+        },
+        body: JSON.stringify({
+          query: `
+            mutation CompanionTransitionIssue($issueId: String!, $stateId: String!) {
+              issueUpdate(id: $issueId, input: { stateId: $stateId }) {
+                success
+                issue {
+                  id
+                  identifier
+                  state { name type }
+                }
+              }
+            }
+          `,
+          variables: { issueId, stateId: startedState.id },
+        }),
+      });
+
+      const updateJson = await updateResponse.json().catch(() => ({})) as {
+        data?: {
+          issueUpdate?: {
+            success?: boolean;
+            issue?: {
+              id?: string;
+              identifier?: string;
+              state?: { name?: string; type?: string };
+            };
+          };
+        };
+        errors?: Array<{ message?: string }>;
+      };
+
+      if (!updateResponse.ok || (updateJson.errors && updateJson.errors.length > 0)) {
+        const errMsg = updateJson.errors?.[0]?.message || updateResponse.statusText || "Failed to update issue state";
+        return c.json({ error: errMsg }, 502);
+      }
+
+      const updatedIssue = updateJson.data?.issueUpdate?.issue;
+      return c.json({
+        ok: true,
+        skipped: false,
+        issue: {
+          id: updatedIssue?.id || issueId,
+          identifier: updatedIssue?.identifier || "",
+          stateName: updatedIssue?.state?.name || "",
+          stateType: updatedIssue?.state?.type || "",
+        },
+      });
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      return c.json({ error: `Linear transition failed: ${errMsg}` }, 502);
+    }
   });
 
   // ─── Git operations ─────────────────────────────────────────────────

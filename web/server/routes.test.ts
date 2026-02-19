@@ -1385,7 +1385,7 @@ describe("GET /api/linear/issues", () => {
               url: "https://linear.app/acme/issue/ENG-123/fix-auth-flow",
               priorityLabel: "High",
               state: { name: "In Progress", type: "started" },
-              team: { key: "ENG", name: "Engineering" },
+              team: { id: "team-eng-1", key: "ENG", name: "Engineering" },
             }],
           },
         },
@@ -1408,6 +1408,7 @@ describe("GET /api/linear/issues", () => {
         stateType: "started",
         teamName: "Engineering",
         teamKey: "ENG",
+        teamId: "team-eng-1",
       }],
     });
     expect(fetchMock).toHaveBeenCalledWith(
@@ -1470,6 +1471,265 @@ describe("GET /api/linear/connection", () => {
       teamName: "Engineering",
       teamKey: "ENG",
     });
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("POST /api/linear/issues/:id/transition", () => {
+  it("returns 400 when linear key is not configured", async () => {
+    vi.mocked(settingsManager.getSettings).mockReturnValue({
+      openrouterApiKey: "",
+      openrouterModel: "openrouter/free",
+      linearApiKey: "",
+      updatedAt: 0,
+    });
+
+    const res = await app.request("/api/linear/issues/issue-123/transition", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teamId: "team-1", currentStateType: "unstarted" }),
+    });
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json).toEqual({ error: "Linear API key is not configured" });
+  });
+
+  it("returns 400 when teamId is missing", async () => {
+    vi.mocked(settingsManager.getSettings).mockReturnValue({
+      openrouterApiKey: "",
+      openrouterModel: "openrouter/free",
+      linearApiKey: "lin_api_123",
+      updatedAt: 0,
+    });
+
+    const res = await app.request("/api/linear/issues/issue-123/transition", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentStateType: "unstarted" }),
+    });
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json).toEqual({ error: "teamId is required" });
+  });
+
+  // Skips transition when the issue is already in "started" state — avoids unnecessary API calls
+  it("skips when issue is already started", async () => {
+    const res = await app.request("/api/linear/issues/issue-123/transition", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teamId: "team-1", currentStateType: "started" }),
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({ ok: true, skipped: true, reason: "already_in_progress_or_completed" });
+  });
+
+  // Skips transition when the issue is already completed — no point moving it backwards
+  it("skips when issue is already completed", async () => {
+    const res = await app.request("/api/linear/issues/issue-123/transition", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teamId: "team-1", currentStateType: "completed" }),
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({ ok: true, skipped: true, reason: "already_in_progress_or_completed" });
+  });
+
+  // Happy path: queries team workflow states, finds "started" state, updates the issue
+  it("transitions issue to started state", async () => {
+    vi.mocked(settingsManager.getSettings).mockReturnValue({
+      openrouterApiKey: "",
+      openrouterModel: "openrouter/free",
+      linearApiKey: "lin_api_123",
+      updatedAt: 0,
+    });
+
+    const fetchMock = vi.fn()
+      // First call: query team workflow states
+      .mockResolvedValueOnce({
+        ok: true,
+        statusText: "OK",
+        json: async () => ({
+          data: {
+            team: {
+              states: {
+                nodes: [
+                  { id: "state-backlog", name: "Backlog", type: "backlog" },
+                  { id: "state-todo", name: "Todo", type: "unstarted" },
+                  { id: "state-inprogress", name: "In Progress", type: "started" },
+                  { id: "state-done", name: "Done", type: "completed" },
+                ],
+              },
+            },
+          },
+        }),
+      })
+      // Second call: issue update mutation
+      .mockResolvedValueOnce({
+        ok: true,
+        statusText: "OK",
+        json: async () => ({
+          data: {
+            issueUpdate: {
+              success: true,
+              issue: {
+                id: "issue-123",
+                identifier: "ENG-456",
+                state: { name: "In Progress", type: "started" },
+              },
+            },
+          },
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await app.request("/api/linear/issues/issue-123/transition", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teamId: "team-1", currentStateType: "unstarted" }),
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({
+      ok: true,
+      skipped: false,
+      issue: {
+        id: "issue-123",
+        identifier: "ENG-456",
+        stateName: "In Progress",
+        stateType: "started",
+      },
+    });
+
+    // Verify both GraphQL calls were made
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    // Verify first call was the states query
+    const firstBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body ?? "{}"));
+    expect(firstBody.query).toContain("team(id: $teamId)");
+    expect(firstBody.variables).toEqual({ teamId: "team-1" });
+
+    // Verify second call was the issue update mutation
+    const secondBody = JSON.parse(String(fetchMock.mock.calls[1][1]?.body ?? "{}"));
+    expect(secondBody.query).toContain("issueUpdate");
+    expect(secondBody.variables).toEqual({ issueId: "issue-123", stateId: "state-inprogress" });
+
+    vi.unstubAllGlobals();
+  });
+
+  // Edge case: team has no "started" type state in its workflow
+  it("returns skipped when no started state exists in team", async () => {
+    vi.mocked(settingsManager.getSettings).mockReturnValue({
+      openrouterApiKey: "",
+      openrouterModel: "openrouter/free",
+      linearApiKey: "lin_api_123",
+      updatedAt: 0,
+    });
+
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      statusText: "OK",
+      json: async () => ({
+        data: {
+          team: {
+            states: {
+              nodes: [
+                { id: "state-backlog", name: "Backlog", type: "backlog" },
+                { id: "state-done", name: "Done", type: "completed" },
+              ],
+            },
+          },
+        },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await app.request("/api/linear/issues/issue-123/transition", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teamId: "team-1", currentStateType: "unstarted" }),
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({ ok: true, skipped: true, reason: "no_started_state_found" });
+
+    vi.unstubAllGlobals();
+  });
+
+  // Error case: Linear API returns an error when querying team states
+  it("returns 502 when states query fails", async () => {
+    vi.mocked(settingsManager.getSettings).mockReturnValue({
+      openrouterApiKey: "",
+      openrouterModel: "openrouter/free",
+      linearApiKey: "lin_api_123",
+      updatedAt: 0,
+    });
+
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      statusText: "Internal Server Error",
+      json: async () => ({
+        errors: [{ message: "Team not found" }],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await app.request("/api/linear/issues/issue-123/transition", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teamId: "team-1", currentStateType: "unstarted" }),
+    });
+    expect(res.status).toBe(502);
+    const json = await res.json();
+    expect(json).toEqual({ error: "Team not found" });
+
+    vi.unstubAllGlobals();
+  });
+
+  // Error case: states query succeeds but issue update mutation fails
+  it("returns 502 when issue update mutation fails", async () => {
+    vi.mocked(settingsManager.getSettings).mockReturnValue({
+      openrouterApiKey: "",
+      openrouterModel: "openrouter/free",
+      linearApiKey: "lin_api_123",
+      updatedAt: 0,
+    });
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        statusText: "OK",
+        json: async () => ({
+          data: {
+            team: {
+              states: {
+                nodes: [
+                  { id: "state-inprogress", name: "In Progress", type: "started" },
+                ],
+              },
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        statusText: "Bad Request",
+        json: async () => ({
+          errors: [{ message: "Issue not found" }],
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await app.request("/api/linear/issues/issue-123/transition", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teamId: "team-1", currentStateType: "unstarted" }),
+    });
+    expect(res.status).toBe(502);
+    const json = await res.json();
+    expect(json).toEqual({ error: "Issue not found" });
+
     vi.unstubAllGlobals();
   });
 });

@@ -473,6 +473,17 @@ export function HomePage() {
         timestamp: Date.now(),
       });
 
+      // Fire-and-forget: transition Linear issue to "In Progress"
+      if (selectedLinearIssue && selectedLinearIssue.stateType !== "started" && selectedLinearIssue.stateType !== "completed") {
+        api.transitionLinearIssue(
+          selectedLinearIssue.id,
+          selectedLinearIssue.teamId,
+          selectedLinearIssue.stateType,
+        ).catch((err) => {
+          console.warn("[Linear] Failed to transition issue to In Progress:", err);
+        });
+      }
+
       // Clear progress on success
       useStore.getState().clearCreation();
     } catch (e: unknown) {
