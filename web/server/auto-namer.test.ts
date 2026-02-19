@@ -17,6 +17,9 @@ beforeEach(() => {
     openrouterApiKey: "or-key",
     openrouterModel: "openrouter/free",
     linearApiKey: "",
+    linearAutoTransition: false,
+    linearAutoTransitionStateId: "",
+    linearAutoTransitionStateName: "",
     updatedAt: 0,
   });
 });
@@ -30,7 +33,7 @@ describe("generateSessionTitle", () => {
       }),
     });
 
-    const title = await generateSessionTitle("Fix login", "claude-sonnet-4-5-20250929");
+    const title = await generateSessionTitle("Fix login", "claude-sonnet-4-6");
 
     expect(title).toBe("Fix Auth Flow");
   });
@@ -40,10 +43,13 @@ describe("generateSessionTitle", () => {
       openrouterApiKey: "",
       openrouterModel: "openrouter/free",
       linearApiKey: "",
+      linearAutoTransition: false,
+      linearAutoTransitionStateId: "",
+      linearAutoTransitionStateName: "",
       updatedAt: 0,
     });
 
-    const title = await generateSessionTitle("Fix login", "claude-sonnet-4-5-20250929");
+    const title = await generateSessionTitle("Fix login", "claude-sonnet-4-6");
 
     expect(title).toBeNull();
     expect(mockFetch).not.toHaveBeenCalled();
@@ -55,7 +61,7 @@ describe("generateSessionTitle", () => {
       json: async () => ({ choices: [{ message: { content: "Short Title" } }] }),
     });
 
-    await generateSessionTitle("X".repeat(1000), "claude-sonnet-4-5-20250929");
+    await generateSessionTitle("X".repeat(1000), "claude-sonnet-4-6");
 
     const [, req] = mockFetch.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(String(req.body)) as { messages: Array<{ role: string; content: string }> };
@@ -70,6 +76,9 @@ describe("generateSessionTitle", () => {
       openrouterApiKey: "or-key",
       openrouterModel: "openai/gpt-4o-mini",
       linearApiKey: "",
+      linearAutoTransition: false,
+      linearAutoTransitionStateId: "",
+      linearAutoTransitionStateName: "",
       updatedAt: 0,
     });
     mockFetch.mockResolvedValueOnce({
@@ -87,7 +96,7 @@ describe("generateSessionTitle", () => {
   it("returns null when response is non-ok", async () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 401, statusText: "Unauthorized" });
 
-    const title = await generateSessionTitle("Fix login", "claude-sonnet-4-5-20250929");
+    const title = await generateSessionTitle("Fix login", "claude-sonnet-4-6");
 
     expect(title).toBeNull();
   });
@@ -95,7 +104,7 @@ describe("generateSessionTitle", () => {
   it("returns null when fetch throws", async () => {
     mockFetch.mockRejectedValueOnce(new Error("network"));
 
-    const title = await generateSessionTitle("Fix login", "claude-sonnet-4-5-20250929");
+    const title = await generateSessionTitle("Fix login", "claude-sonnet-4-6");
 
     expect(title).toBeNull();
   });
@@ -141,6 +150,9 @@ describe("generateSessionTitle", () => {
       openrouterApiKey: "or-key",
       openrouterModel: "",
       linearApiKey: "",
+      linearAutoTransition: false,
+      linearAutoTransitionStateId: "",
+      linearAutoTransitionStateName: "",
       updatedAt: 0,
     });
     mockFetch.mockResolvedValueOnce({

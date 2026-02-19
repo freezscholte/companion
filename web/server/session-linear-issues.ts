@@ -21,6 +21,7 @@ export interface StoredLinearIssue {
   stateType: string;
   teamName: string;
   teamKey: string;
+  teamId: string;
   assigneeName?: string;
   updatedAt?: string;
 }

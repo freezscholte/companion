@@ -445,6 +445,7 @@ const MOCK_LINEAR_ISSUE_ACTIVE: LinearIssue = {
   stateType: "started",
   teamName: "Thevibecompany",
   teamKey: "THE",
+  teamId: "team-the",
 };
 
 const MOCK_LINEAR_ISSUE_DONE: LinearIssue = {
@@ -459,6 +460,7 @@ const MOCK_LINEAR_ISSUE_DONE: LinearIssue = {
   stateType: "completed",
   teamName: "Engineering",
   teamKey: "ENG",
+  teamId: "team-eng",
 };
 
 const MOCK_LINEAR_COMMENTS: LinearComment[] = [

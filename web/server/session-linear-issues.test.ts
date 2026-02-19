@@ -30,6 +30,7 @@ const mockIssue: StoredLinearIssue = {
   stateType: "started",
   teamName: "Engineering",
   teamKey: "ENG",
+  teamId: "team-1",
 };
 
 beforeEach(() => {
