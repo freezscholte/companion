@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type LinearWorkflowState } from "../api.js";
+import { api, type LinearWorkflowState, type LinearTeamStates } from "../api.js";
 import { navigateHome, navigateToSession } from "../utils/routing.js";
 import { useStore } from "../store.js";
 import { LinearLogo } from "./LinearLogo.js";
@@ -24,6 +24,8 @@ export function LinearSettingsPage({ embedded = false }: LinearSettingsPageProps
   const [autoTransition, setAutoTransition] = useState(false);
   const [selectedStateId, setSelectedStateId] = useState("");
   const [selectedStateName, setSelectedStateName] = useState("");
+  const [teams, setTeams] = useState<LinearTeamStates[]>([]);
+  const [selectedTeamId, setSelectedTeamId] = useState("");
   const [workflowStates, setWorkflowStates] = useState<LinearWorkflowState[]>([]);
   const [loadingStates, setLoadingStates] = useState(false);
   const [savingAutoTransition, setSavingAutoTransition] = useState(false);
@@ -54,8 +56,11 @@ export function LinearSettingsPage({ embedded = false }: LinearSettingsPageProps
     setLoadingStates(true);
     try {
       const result = await api.getLinearStates();
+      setTeams(result.teams);
+      // Default to first team if none selected
       const firstTeam = result.teams[0];
-      if (firstTeam) {
+      if (firstTeam && !selectedTeamId) {
+        setSelectedTeamId(firstTeam.id);
         setWorkflowStates(firstTeam.states);
       }
     } catch {
@@ -83,6 +88,14 @@ export function LinearSettingsPage({ embedded = false }: LinearSettingsPageProps
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
   }, []);
+
+  // Sync workflowStates when selectedTeamId changes
+  useEffect(() => {
+    const team = teams.find((t) => t.id === selectedTeamId);
+    if (team) {
+      setWorkflowStates(team.states);
+    }
+  }, [teams, selectedTeamId]);
 
   // Sync selectedStateId when workflowStates or selectedStateName changes
   useEffect(() => {
@@ -132,6 +145,8 @@ export function LinearSettingsPage({ embedded = false }: LinearSettingsPageProps
       setConnected(false);
       setViewerLabel("");
       setLinearApiKey("");
+      setTeams([]);
+      setSelectedTeamId("");
       setWorkflowStates([]);
       setAutoTransition(false);
       setSelectedStateId("");
@@ -342,6 +357,30 @@ export function LinearSettingsPage({ embedded = false }: LinearSettingsPageProps
                 {autoTransition ? "Enabled" : "Disabled"}
               </span>
             </div>
+
+            {autoTransition && teams.length > 1 && (
+              <div>
+                <label className="block text-sm font-medium mb-1.5" htmlFor="transition-team">
+                  Team
+                </label>
+                <select
+                  id="transition-team"
+                  value={selectedTeamId}
+                  onChange={(e) => {
+                    setSelectedTeamId(e.target.value);
+                    setSelectedStateId("");
+                    setSelectedStateName("");
+                  }}
+                  className="w-full px-3 py-2.5 text-sm bg-cc-input-bg border border-cc-border rounded-lg text-cc-fg focus:outline-none focus:border-cc-primary/60"
+                >
+                  {teams.map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name} ({team.key})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {autoTransition && (
               <div>
