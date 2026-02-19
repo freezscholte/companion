@@ -883,7 +883,7 @@ describe("POST /api/sessions/:id/editor/start", () => {
       available: true,
       installed: true,
       mode: "host",
-      url: "http://localhost:13338/?folder=%2Frepo%2Fmy%20app",
+      url: "http://localhost:13338?folder=%2Frepo%2Fmy%20app",
     });
     expect(execSync).toHaveBeenCalledWith(
       expect.stringContaining("--bind-addr 127.0.0.1:13338"),
@@ -919,7 +919,7 @@ describe("POST /api/sessions/:id/editor/start", () => {
       available: true,
       installed: true,
       mode: "container",
-      url: "http://localhost:49152/?folder=%2Fworkspace",
+      url: "http://localhost:49152?folder=%2Fworkspace",
     });
     expect(execSpy).toHaveBeenCalledWith(
       "cid-1",

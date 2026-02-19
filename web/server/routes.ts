@@ -776,7 +776,7 @@ export function createRoutes(
           available: true,
           installed: true,
           mode: "container",
-          url: `http://localhost:${portMapping.hostPort}/${editorPathSuffix}`,
+          url: `http://localhost:${portMapping.hostPort}${editorPathSuffix}`,
         });
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
@@ -814,7 +814,7 @@ export function createRoutes(
         available: true,
         installed: true,
         mode: "host",
-        url: `http://localhost:${VSCODE_EDITOR_HOST_PORT}/${editorPathSuffix}`,
+        url: `http://localhost:${VSCODE_EDITOR_HOST_PORT}${editorPathSuffix}`,
       });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);

@@ -84,7 +84,9 @@ RUN . "$NVM_DIR/nvm.sh" && npm install -g @openai/codex
 RUN pip install --break-system-packages poetry uv
 
 # ── Layer 12: VS Code editor server (code-server) ───────────────────────────
-RUN curl -fsSL https://code-server.dev/install.sh | sh
+RUN curl -fsSL https://code-server.dev/install.sh -o /tmp/install-code-server.sh \
+    && sh /tmp/install-code-server.sh \
+    && rm /tmp/install-code-server.sh
 
 # ── Workspace ─────────────────────────────────────────────────────────────────
 WORKDIR /workspace
