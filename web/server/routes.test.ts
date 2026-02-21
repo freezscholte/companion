@@ -288,6 +288,27 @@ describe("POST /api/sessions/create", () => {
     );
   });
 
+  it("passes launch branching controls through to launcher", async () => {
+    const res = await app.request("/api/sessions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        cwd: "/test",
+        resumeSessionAt: "  prior-session-123  ",
+        forkSession: true,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(launcher.launch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cwd: "/test",
+        resumeSessionAt: "prior-session-123",
+        forkSession: true,
+      }),
+    );
+  });
+
   it("injects environment variables when envSlug is provided", async () => {
     vi.mocked(envManager.getEnv).mockReturnValue({
       name: "Production",
@@ -3010,6 +3031,29 @@ describe("POST /api/sessions/create-stream", () => {
     const doneData = JSON.parse(doneEvent!.data);
     expect(doneData.sessionId).toBe("session-1");
     expect(doneData.cwd).toBe("/test");
+  });
+
+  it("passes launch branching controls through to launcher", async () => {
+    const res = await app.request("/api/sessions/create-stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        cwd: "/test",
+        resumeSessionAt: "prior-session-456",
+        forkSession: true,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    await parseSSE(res);
+
+    expect(launcher.launch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cwd: "/test",
+        resumeSessionAt: "prior-session-456",
+        forkSession: true,
+      }),
+    );
   });
 
   it("emits git progress events when branch is specified", async () => {

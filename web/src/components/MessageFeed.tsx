@@ -357,7 +357,6 @@ function AssistantAvatar() {
 
 export function MessageFeed({ sessionId }: { sessionId: string }) {
   const messages = useStore((s) => s.messages.get(sessionId) ?? EMPTY_MESSAGES);
-  const streamingText = useStore((s) => s.streaming.get(sessionId));
   const streamingStartedAt = useStore((s) => s.streamingStartedAt.get(sessionId));
   const streamingOutputTokens = useStore((s) => s.streamingOutputTokens.get(sessionId));
   const sessionStatus = useStore((s) => s.sessionStatus.get(sessionId));
@@ -368,6 +367,10 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
   const [elapsed, setElapsed] = useState(0);
   const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
   const chatTabReentryTick = useStore((s) => s.chatTabReentryTickBySession.get(sessionId) ?? 0);
+  const hasStreamingAssistant = useMemo(
+    () => messages.some((m) => m.role === "assistant" && m.isStreaming),
+    [messages],
+  );
 
   const grouped = useMemo(() => groupMessages(messages), [messages]);
 
@@ -463,9 +466,9 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
     if (isNearBottom.current) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages.length, streamingText]);
+  }, [messages]);
 
-  if (messages.length === 0 && !streamingText) {
+  if (messages.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-4 select-none px-6">
         <div className="w-14 h-14 rounded-2xl bg-cc-card border border-cc-border flex items-center justify-center">
@@ -508,7 +511,7 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
           <FeedEntries entries={visibleEntries} />
 
           {/* Tool progress indicator */}
-          {toolProgress && toolProgress.size > 0 && !streamingText && (
+          {toolProgress && toolProgress.size > 0 && !hasStreamingAssistant && (
             <div className="flex items-center gap-1.5 text-[11px] text-cc-muted font-mono-code pl-9">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-cc-primary animate-pulse" />
               {Array.from(toolProgress.values()).map((p, i) => (
@@ -518,25 +521,6 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
                   <span className="text-cc-muted/60">{p.elapsedSeconds}s</span>
                 </span>
               ))}
-            </div>
-          )}
-
-          {/* Streaming indicator */}
-          {streamingText && (
-            <div className="animate-[fadeSlideIn_0.2s_ease-out]">
-              <div className="flex items-start gap-3">
-                <div className="w-6 h-6 rounded-full bg-cc-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                  <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5 text-cc-primary">
-                    <path d="M8 1v14M1 8h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <pre className="font-serif-assistant text-[15px] text-cc-fg whitespace-pre-wrap break-words leading-relaxed">
-                    {streamingText}
-                    <span className="inline-block w-0.5 h-4 bg-cc-primary ml-0.5 align-middle animate-[pulse-dot_0.8s_ease-in-out_infinite]" />
-                  </pre>
-                </div>
-              </div>
             </div>
           )}
 

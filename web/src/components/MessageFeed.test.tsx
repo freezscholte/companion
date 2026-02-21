@@ -207,35 +207,32 @@ describe("MessageFeed - message rendering", () => {
   });
 });
 
-// ─── Streaming indicator ─────────────────────────────────────────────────────
+// ─── Streaming assistant bubble ──────────────────────────────────────────────
 
-describe("MessageFeed - streaming text", () => {
-  it("renders streaming text with cursor animation", () => {
+describe("MessageFeed - streaming assistant bubble", () => {
+  it("renders streaming assistant text in the normal message path with cursor", () => {
     const sid = "test-streaming";
     setStoreMessages(sid, [
       makeMessage({ id: "u1", role: "user", content: "Hello" }),
+      makeMessage({ id: "a1", role: "assistant", content: "I am currently thinking about", isStreaming: true }),
     ]);
-    setStoreStreaming(sid, "I am currently thinking about");
 
-    const { container } = render(<MessageFeed sessionId={sid} />);
+    render(<MessageFeed sessionId={sid} />);
 
     expect(screen.getByText("I am currently thinking about")).toBeTruthy();
-    // Check for the blinking cursor element (animate class with pulse-dot)
-    const cursor = container.querySelector('[class*="animate-"]');
-    expect(cursor).toBeTruthy();
+    expect(screen.getByTestId("assistant-stream-cursor")).toBeTruthy();
   });
 
-  it("does not render streaming indicator when no streaming text", () => {
+  it("does not render a streaming cursor for non-streaming assistant messages", () => {
     const sid = "test-no-stream";
     setStoreMessages(sid, [
       makeMessage({ id: "u1", role: "user", content: "Hello" }),
+      makeMessage({ id: "a1", role: "assistant", content: "Done" }),
     ]);
 
-    const { container } = render(<MessageFeed sessionId={sid} />);
+    render(<MessageFeed sessionId={sid} />);
 
-    // No pre element with streaming content
-    const preElements = container.querySelectorAll("pre.font-serif-assistant");
-    expect(preElements.length).toBe(0);
+    expect(screen.queryByTestId("assistant-stream-cursor")).toBeNull();
   });
 });
 

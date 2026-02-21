@@ -197,6 +197,8 @@ export interface CreateSessionOpts {
   useWorktree?: boolean;
   backend?: "claude" | "codex";
   container?: ContainerCreateOpts;
+  resumeSessionAt?: string;
+  forkSession?: boolean;
 }
 
 export interface BackendInfo {

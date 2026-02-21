@@ -107,7 +107,7 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
       <div className="flex items-start gap-3">
         <AssistantAvatar />
         <div className="flex-1 min-w-0">
-          <MarkdownContent text={message.content} />
+          <MarkdownContent text={message.content} showCursor={!!message.isStreaming} />
         </div>
       </div>
     );
@@ -144,7 +144,7 @@ function AssistantAvatar() {
   );
 }
 
-function MarkdownContent({ text }: { text: string }) {
+function MarkdownContent({ text, showCursor = false }: { text: string; showCursor?: boolean }) {
   return (
     <div className="markdown-body text-[14px] sm:text-[15px] text-cc-fg leading-relaxed overflow-hidden">
       <Markdown
@@ -242,6 +242,12 @@ function MarkdownContent({ text }: { text: string }) {
       >
         {text}
       </Markdown>
+      {showCursor && (
+        <span
+          data-testid="assistant-stream-cursor"
+          className="inline-block w-0.5 h-4 bg-cc-primary ml-0.5 align-middle animate-[pulse-dot_0.8s_ease-in-out_infinite]"
+        />
+      )}
     </div>
   );
 }

@@ -57,6 +57,10 @@ export function createRoutes(
   api.post("/sessions/create", async (c) => {
     const body = await c.req.json().catch(() => ({}));
     try {
+      const resumeSessionAt = typeof body.resumeSessionAt === "string" && body.resumeSessionAt.trim()
+        ? body.resumeSessionAt.trim()
+        : undefined;
+      const forkSession = body.forkSession === true;
       const backend = body.backend ?? "claude";
       if (backend !== "claude" && backend !== "codex") {
         return c.json({ error: `Invalid backend: ${String(backend)}` }, 400);
@@ -264,6 +268,8 @@ export function createRoutes(
         containerName,
         containerImage,
         containerCwd: containerInfo?.containerCwd,
+        resumeSessionAt,
+        forkSession,
       });
 
       // Re-track container with real session ID and mark session as containerized
@@ -312,6 +318,10 @@ export function createRoutes(
 
     return streamSSE(c, async (stream) => {
       try {
+        const resumeSessionAt = typeof body.resumeSessionAt === "string" && body.resumeSessionAt.trim()
+          ? body.resumeSessionAt.trim()
+          : undefined;
+        const forkSession = body.forkSession === true;
         const backend = body.backend ?? "claude";
         if (backend !== "claude" && backend !== "codex") {
           await stream.writeSSE({
@@ -583,6 +593,8 @@ export function createRoutes(
           containerName,
           containerImage,
           containerCwd: containerInfo?.containerCwd,
+          resumeSessionAt,
+          forkSession,
         });
 
         // Re-track container and mark session as containerized
