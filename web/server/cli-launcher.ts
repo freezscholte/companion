@@ -71,6 +71,10 @@ export interface SdkSessionInfo {
   cronJobId?: string;
   /** Human-readable name of the cron job that spawned this session */
   cronJobName?: string;
+  /** If session was created from an existing Claude thread/session. */
+  resumeSessionAt?: string;
+  /** Whether the resumed session used --fork-session. */
+  forkSession?: boolean;
 
   // Container fields
   /** Docker container ID when session runs inside a container */
@@ -212,6 +216,11 @@ export class CliLauncher {
       createdAt: Date.now(),
       backendType,
     };
+
+    if (options.resumeSessionAt) {
+      info.resumeSessionAt = options.resumeSessionAt;
+      info.forkSession = options.forkSession === true;
+    }
 
     if (backendType === "codex") {
       info.codexInternetAccess = options.codexInternetAccess === true;

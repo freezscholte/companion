@@ -33,9 +33,9 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
               ))}
             </div>
           )}
-          <pre className="text-[13px] sm:text-[14px] whitespace-pre-wrap break-words font-sans-ui leading-relaxed">
-            {message.content}
-          </pre>
+          <div className="text-[13px] sm:text-[14px] leading-relaxed break-words">
+            <MarkdownContent text={message.content} />
+          </div>
         </div>
       </div>
     );
@@ -212,7 +212,7 @@ function MarkdownContent({ text, showCursor = false }: { text: string; showCurso
             }
 
             return (
-              <code className="px-1 py-0.5 rounded bg-cc-code-bg/30 text-[13px] font-mono-code text-cc-primary">
+              <code className="px-1.5 py-0.5 rounded-md bg-cc-fg/[0.06] text-[13px] font-mono-code text-cc-fg/80">
                 {children}
               </code>
             );
@@ -414,7 +414,7 @@ function ThinkingBlock({ text }: { text: string }) {
                   ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-0.5">{children}</ol>,
                   li: ({ children }) => <li>{children}</li>,
                   code: ({ children }) => (
-                    <code className="px-1 py-0.5 rounded bg-cc-code-bg/40 text-cc-primary font-mono-code text-[12px]">
+                    <code className="px-1.5 py-0.5 rounded-md bg-cc-fg/[0.06] text-cc-fg/80 font-mono-code text-[12px]">
                       {children}
                     </code>
                   ),

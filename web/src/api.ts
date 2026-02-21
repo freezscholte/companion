@@ -1,4 +1,5 @@
 import type { SdkSessionInfo } from "./types.js";
+import type { ContentBlock } from "./types.js";
 import { captureEvent, captureException } from "./analytics.js";
 
 const BASE = "/api";
@@ -211,6 +212,33 @@ export interface BackendModelInfo {
   value: string;
   label: string;
   description: string;
+}
+
+export interface ClaudeDiscoveredSession {
+  sessionId: string;
+  cwd: string;
+  gitBranch?: string;
+  slug?: string;
+  lastActivityAt: number;
+  sourceFile: string;
+}
+
+export interface ClaudeSessionHistoryMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  contentBlocks?: ContentBlock[];
+  timestamp: number;
+  model?: string;
+  stopReason?: string | null;
+}
+
+export interface ClaudeSessionHistoryPage {
+  sourceFile: string;
+  messages: ClaudeSessionHistoryMessage[];
+  nextCursor: number;
+  hasMore: boolean;
+  totalMessages: number;
 }
 
 export interface GitRepoInfo {
@@ -468,6 +496,9 @@ export interface CreateSessionStreamResult {
   sessionId: string;
   state: string;
   cwd: string;
+  backendType?: "claude" | "codex";
+  resumeSessionAt?: string;
+  forkSession?: boolean;
 }
 
 /**
@@ -539,6 +570,17 @@ export const api = {
     ),
 
   listSessions: () => get<SdkSessionInfo[]>("/sessions"),
+  discoverClaudeSessions: (limit = 200) =>
+    get<{ sessions: ClaudeDiscoveredSession[] }>(
+      `/claude/sessions/discover?limit=${encodeURIComponent(String(limit))}`,
+    ),
+  getClaudeSessionHistory: (sessionId: string, opts?: { cursor?: number; limit?: number }) => {
+    const cursor = Math.max(0, Math.floor(opts?.cursor ?? 0));
+    const limit = Math.max(1, Math.floor(opts?.limit ?? 40));
+    return get<ClaudeSessionHistoryPage>(
+      `/claude/sessions/${encodeURIComponent(sessionId)}/history?cursor=${encodeURIComponent(String(cursor))}&limit=${encodeURIComponent(String(limit))}`,
+    );
+  },
 
   killSession: (sessionId: string) =>
     post(`/sessions/${encodeURIComponent(sessionId)}/kill`),

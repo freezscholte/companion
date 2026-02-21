@@ -5,8 +5,12 @@ beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn();
 });
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ChatMessage } from "../types.js";
+
+const { getClaudeSessionHistoryMock } = vi.hoisted(() => ({
+  getClaudeSessionHistoryMock: vi.fn(),
+}));
 
 // Mock react-markdown to avoid ESM issues in tests
 vi.mock("react-markdown", () => ({
@@ -15,6 +19,12 @@ vi.mock("react-markdown", () => ({
 
 vi.mock("remark-gfm", () => ({
   default: {},
+}));
+
+vi.mock("../api.js", () => ({
+  api: {
+    getClaudeSessionHistory: getClaudeSessionHistoryMock,
+  },
 }));
 
 // Build a mock for the store that returns configurable values per session
@@ -30,6 +40,7 @@ vi.mock("../store.js", () => ({
       sessionStatus: mockStoreValues.sessionStatus ?? new Map(),
       toolProgress: mockStoreValues.toolProgress ?? new Map(),
       chatTabReentryTickBySession: mockStoreValues.chatTabReentryTickBySession ?? new Map(),
+      sdkSessions: mockStoreValues.sdkSessions ?? [],
     };
     return selector(state);
   },
@@ -76,6 +87,10 @@ function setStoreStreamingOutputTokens(sessionId: string, tokens: number | undef
   mockStoreValues.streamingOutputTokens = map;
 }
 
+function setSdkSessions(sessions: Array<Record<string, unknown>>) {
+  mockStoreValues.sdkSessions = sessions;
+}
+
 function resetStore() {
   mockStoreValues.messages = new Map();
   mockStoreValues.streaming = new Map();
@@ -83,10 +98,12 @@ function resetStore() {
   mockStoreValues.streamingOutputTokens = new Map();
   mockStoreValues.sessionStatus = new Map();
   mockStoreValues.chatTabReentryTickBySession = new Map();
+  mockStoreValues.sdkSessions = [];
 }
 
 beforeEach(() => {
   resetStore();
+  getClaudeSessionHistoryMock.mockReset();
 });
 
 // ─── Pure functions tested through component output ──────────────────────────
@@ -272,6 +289,57 @@ describe("MessageFeed - generation stats bar", () => {
     expect(screen.getByText("Generating...")).toBeTruthy();
     // Should show "2.5k" token count
     expect(screen.getByText(/2\.5k/)).toBeTruthy();
+  });
+});
+
+describe("MessageFeed - lazy resume transcript", () => {
+  it("loads previous transcript pages for resumed Claude sessions", async () => {
+    const sid = "test-resume";
+    setStoreMessages(sid, []);
+    setSdkSessions([
+      {
+        sessionId: sid,
+        state: "connected",
+        cwd: "/Users/test/repo",
+        createdAt: Date.now(),
+        backendType: "claude",
+        resumeSessionAt: "prior-session-123",
+        forkSession: true,
+      },
+    ]);
+    getClaudeSessionHistoryMock.mockResolvedValueOnce({
+      sourceFile: "/Users/test/.claude/projects/repo/prior-session-123.jsonl",
+      nextCursor: 2,
+      hasMore: false,
+      totalMessages: 2,
+      messages: [
+        {
+          id: "resume-prior-session-123-user-u1",
+          role: "user",
+          content: "Earlier question",
+          timestamp: 1,
+        },
+        {
+          id: "resume-prior-session-123-assistant-a1",
+          role: "assistant",
+          content: "Earlier answer",
+          timestamp: 2,
+        },
+      ],
+    });
+
+    render(<MessageFeed sessionId={sid} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /load previous history/i }));
+
+    await waitFor(() => {
+      expect(getClaudeSessionHistoryMock).toHaveBeenCalledWith("prior-session-123", {
+        cursor: 0,
+        limit: 40,
+      });
+    });
+    expect(await screen.findByText("Earlier question")).toBeTruthy();
+    expect(await screen.findByText("Earlier answer")).toBeTruthy();
   });
 });
 
