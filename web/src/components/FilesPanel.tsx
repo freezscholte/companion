@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
@@ -198,8 +198,19 @@ export function FilesPanel({ sessionId }: FilesPanelProps) {
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string>("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const imageUrlRef = useRef<string | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Keep ref in sync so unmount cleanup can access current value
+  useEffect(() => { imageUrlRef.current = imageUrl; }, [imageUrl]);
+
+  // Revoke object URL on component unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (imageUrlRef.current) URL.revokeObjectURL(imageUrlRef.current);
+    };
+  }, []);
 
   // Load the file tree when cwd changes
   useEffect(() => {
