@@ -5,12 +5,14 @@ import "@testing-library/jest-dom";
 const getFileTreeMock = vi.hoisted(() => vi.fn());
 const readFileMock = vi.hoisted(() => vi.fn());
 const writeFileMock = vi.hoisted(() => vi.fn());
+const getFileBlobMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../api.js", () => ({
   api: {
     getFileTree: getFileTreeMock,
     readFile: readFileMock,
     writeFile: writeFileMock,
+    getFileBlob: getFileBlobMock,
   },
 }));
 
@@ -52,9 +54,16 @@ beforeEach(() => {
   resetStore();
 });
 
+// Helper: both desktop and mobile layouts render in jsdom (CSS hidden doesn't apply),
+// so file buttons appear twice. Click the first one.
+async function clickFile(name: string) {
+  const btns = await screen.findAllByText(name);
+  fireEvent.click(btns[0]);
+}
+
 describe("SessionEditorPane", () => {
-  it("loads tree and file content", async () => {
-    // Ensures the editor initializes from existing fs endpoints without code-server.
+  it("loads tree and reads file when selected", async () => {
+    // Tree loads on mount, file content loads when a file is clicked
     getFileTreeMock.mockResolvedValue({
       path: "/repo",
       tree: [
@@ -66,8 +75,14 @@ describe("SessionEditorPane", () => {
     render(<SessionEditorPane sessionId="s1" />);
 
     await waitFor(() => expect(getFileTreeMock).toHaveBeenCalledWith("/repo"));
+
+    // Click the file to select it (use first match — desktop and mobile both render)
+    await clickFile("a.ts");
+
     await waitFor(() => expect(readFileMock).toHaveBeenCalledWith("/repo/src/a.ts"));
-    expect(await screen.findByText("src/a.ts")).toBeInTheDocument();
+    // File path label appears in the editor header
+    const pathLabels = await screen.findAllByText("src/a.ts");
+    expect(pathLabels.length).toBeGreaterThanOrEqual(1);
   });
 
   it("saves when content changes", async () => {
@@ -80,9 +95,16 @@ describe("SessionEditorPane", () => {
 
     render(<SessionEditorPane sessionId="s1" />);
 
+    // Click file to select it first
+    await clickFile("index.ts");
+
     await waitFor(() => expect(readFileMock).toHaveBeenCalled());
-    fireEvent.change(screen.getByLabelText("Code editor"), { target: { value: "hello!\n" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    // CodeMirror mock renders as textarea; both layouts render it so get the first
+    const editors = screen.getAllByLabelText("Code editor");
+    fireEvent.change(editors[0], { target: { value: "hello!\n" } });
+    // Save buttons also appear in both layouts — click the first
+    const saveBtns = screen.getAllByRole("button", { name: "Save" });
+    fireEvent.click(saveBtns[0]);
 
     await waitFor(() => {
       expect(writeFileMock).toHaveBeenCalled();
@@ -94,5 +116,63 @@ describe("SessionEditorPane", () => {
     resetStore({ sessions: new Map([["s1", {}]]) });
     render(<SessionEditorPane sessionId="s1" />);
     expect(screen.getByText("Editor unavailable while session is reconnecting.")).toBeInTheDocument();
+  });
+
+  it("renders image preview for image files instead of CodeMirror", async () => {
+    // When an image file is selected, getFileBlob is called (not readFile)
+    // and an <img> element is rendered instead of CodeMirror
+    getFileTreeMock.mockResolvedValue({
+      path: "/repo",
+      tree: [{ name: "logo.png", path: "/repo/logo.png", type: "file" }],
+    });
+    const fakeUrl = "blob:http://localhost/fake-image";
+    getFileBlobMock.mockResolvedValue(fakeUrl);
+
+    render(<SessionEditorPane sessionId="s1" />);
+
+    await clickFile("logo.png");
+
+    await waitFor(() => expect(getFileBlobMock).toHaveBeenCalledWith("/repo/logo.png"));
+    // readFile should NOT be called for images
+    expect(readFileMock).not.toHaveBeenCalled();
+
+    // Image element should render with the blob URL
+    const imgs = await screen.findAllByRole("img");
+    expect(imgs[0]).toHaveAttribute("src", fakeUrl);
+    expect(imgs[0]).toHaveAttribute("alt", "logo.png");
+  });
+
+  it("hides save button for image files", async () => {
+    // Save button should not appear when viewing image files (they're read-only)
+    getFileTreeMock.mockResolvedValue({
+      path: "/repo",
+      tree: [{ name: "photo.jpg", path: "/repo/photo.jpg", type: "file" }],
+    });
+    getFileBlobMock.mockResolvedValue("blob:http://localhost/photo");
+
+    render(<SessionEditorPane sessionId="s1" />);
+
+    await clickFile("photo.jpg");
+
+    await waitFor(() => expect(getFileBlobMock).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+  });
+
+  it("has mobile back button for navigation", async () => {
+    // Mobile layout shows a back button to return to file tree
+    getFileTreeMock.mockResolvedValue({
+      path: "/repo",
+      tree: [{ name: "main.ts", path: "/repo/main.ts", type: "file" }],
+    });
+    readFileMock.mockResolvedValue({ path: "/repo/main.ts", content: "code\n" });
+
+    render(<SessionEditorPane sessionId="s1" />);
+
+    await clickFile("main.ts");
+
+    await waitFor(() => expect(readFileMock).toHaveBeenCalled());
+    // Back button should exist (visible on mobile via sm:hidden)
+    const backBtns = screen.getAllByLabelText("Back to file tree");
+    expect(backBtns.length).toBeGreaterThanOrEqual(1);
   });
 });

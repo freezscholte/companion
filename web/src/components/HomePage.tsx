@@ -290,6 +290,8 @@ export function HomePage() {
       setIsNewBranch(false);
     }).catch(() => {
       setGitRepoInfo(null);
+      setSelectedBranch("");
+      setIsNewBranch(false);
     });
   }, [cwd]);
 

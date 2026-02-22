@@ -2,7 +2,7 @@ import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { useStore } from "../store.js";
 import { parseHash } from "../utils/routing.js";
 
-type WorkspaceTab = "chat" | "diff" | "terminal" | "processes" | "files" | "editor";
+type WorkspaceTab = "chat" | "diff" | "terminal" | "processes" | "editor";
 
 export function TopBar() {
   const hash = useSyncExternalStore(
@@ -24,7 +24,6 @@ export function TopBar() {
   const taskPanelOpen = useStore((s) => s.taskPanelOpen);
   const setTaskPanelOpen = useStore((s) => s.setTaskPanelOpen);
   const activeTab = useStore((s) => s.activeTab);
-  const editorTabEnabled = useStore((s) => s.editorTabEnabled);
   const setActiveTab = useStore((s) => s.setActiveTab);
   const markChatTabReentry = useStore((s) => s.markChatTabReentry);
   const quickTerminalOpen = useStore((s) => s.quickTerminalOpen);
@@ -78,11 +77,7 @@ export function TopBar() {
     : null;
   const showWorkspaceControls = !!(currentSessionId && isSessionView);
   const showContextToggle = route.page === "session" && !!currentSessionId;
-  const workspaceTabs = useMemo(() => {
-    const tabs: WorkspaceTab[] = ["chat", "diff", "terminal", "processes", "files"];
-    if (editorTabEnabled) tabs.push("editor");
-    return tabs;
-  }, [editorTabEnabled]);
+  const workspaceTabs: WorkspaceTab[] = ["chat", "diff", "terminal", "processes", "editor"];
 
   const activateWorkspaceTab = (tab: WorkspaceTab) => {
     if (tab === "terminal") {
@@ -91,12 +86,6 @@ export function TopBar() {
         openQuickTerminal({ ...defaultTerminalOpts, reuseIfExists: true });
       }
       setActiveTab("terminal");
-      return;
-    }
-
-    if (tab === "files") {
-      if (!cwd) return;
-      setActiveTab("files");
       return;
     }
 
@@ -127,7 +116,7 @@ export function TopBar() {
         return;
       }
       event.preventDefault();
-      const currentIndex = Math.max(0, workspaceTabs.indexOf(activeTab));
+      const currentIndex = Math.max(0, workspaceTabs.indexOf(activeTab as WorkspaceTab));
       const direction = event.shiftKey ? -1 : 1;
       const nextIndex = (currentIndex + direction + workspaceTabs.length) % workspaceTabs.length;
       activateWorkspaceTab(workspaceTabs[nextIndex]);
@@ -151,10 +140,10 @@ export function TopBar() {
         </button>
 
         {showWorkspaceControls && (
-          <div className="flex-1 flex items-center justify-center gap-0.5 min-w-0">
+          <div className="flex-1 flex items-center justify-center gap-0.5 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <button
                 onClick={() => activateWorkspaceTab("chat")}
-                className={`h-full px-3 text-[12px] font-medium transition-colors cursor-pointer min-w-0 max-w-[44vw] sm:max-w-[30vw] truncate flex items-center gap-1.5 border-b-[1.5px] ${
+                className={`h-full px-3 text-[12px] font-medium transition-colors cursor-pointer flex items-center gap-1.5 border-b-[1.5px] shrink-0 ${
                   activeTab === "chat"
                     ? "text-cc-fg border-cc-primary"
                     : "text-cc-muted hover:text-cc-fg border-transparent"
@@ -171,11 +160,11 @@ export function TopBar() {
                           ? "bg-cc-warning"
                           : "bg-cc-success"
                   }`} />
-                  <span className="truncate">{sessionName || "Session"}</span>
+                  Session
               </button>
               <button
                 onClick={() => activateWorkspaceTab("diff")}
-                className={`h-full px-3 text-[12px] font-medium transition-colors cursor-pointer flex items-center gap-1.5 border-b-[1.5px] ${
+                className={`h-full px-3 text-[12px] font-medium transition-colors cursor-pointer flex items-center gap-1.5 border-b-[1.5px] shrink-0 ${
                   activeTab === "diff"
                     ? "text-cc-fg border-cc-primary"
                     : "text-cc-muted hover:text-cc-fg border-transparent"
@@ -192,7 +181,7 @@ export function TopBar() {
               <button
                 onClick={() => activateWorkspaceTab("terminal")}
                 disabled={!cwd}
-                className={`h-full px-3 text-[12px] font-medium transition-colors flex items-center border-b-[1.5px] ${
+                className={`h-full px-3 text-[12px] font-medium transition-colors flex items-center border-b-[1.5px] shrink-0 ${
                   !cwd
                     ? "text-cc-muted/50 border-transparent cursor-not-allowed"
                     : activeTab === "terminal"
@@ -206,7 +195,7 @@ export function TopBar() {
               </button>
               <button
                 onClick={() => activateWorkspaceTab("processes")}
-                className={`h-full px-3 text-[12px] font-medium transition-colors cursor-pointer flex items-center gap-1.5 border-b-[1.5px] ${
+                className={`h-full px-3 text-[12px] font-medium transition-colors cursor-pointer flex items-center gap-1.5 border-b-[1.5px] shrink-0 ${
                   activeTab === "processes"
                     ? "text-cc-fg border-cc-primary"
                     : "text-cc-muted hover:text-cc-fg border-transparent"
@@ -221,37 +210,20 @@ export function TopBar() {
                 )}
               </button>
               <button
-                onClick={() => activateWorkspaceTab("files")}
+                onClick={() => activateWorkspaceTab("editor")}
                 disabled={!cwd}
-                className={`h-full px-3 text-[12px] font-medium transition-colors flex items-center border-b-[1.5px] ${
+                className={`h-full px-3 text-[12px] font-medium transition-colors flex items-center border-b-[1.5px] shrink-0 ${
                   !cwd
                     ? "text-cc-muted/50 border-transparent cursor-not-allowed"
-                    : activeTab === "files"
+                    : activeTab === "editor"
                       ? "text-cc-fg border-cc-primary cursor-pointer"
                       : "text-cc-muted hover:text-cc-fg border-transparent cursor-pointer"
                 }`}
-                title={!cwd ? "Files unavailable while session is reconnecting" : "Project files"}
-                aria-label="Files tab"
+                title={!cwd ? "Editor unavailable while session is reconnecting" : "Editor"}
+                aria-label="Editor tab"
               >
-                Files
+                Editor
               </button>
-              {editorTabEnabled && (
-                <button
-                  onClick={() => activateWorkspaceTab("editor")}
-                  disabled={!cwd}
-                  className={`h-full px-3 text-[12px] font-medium transition-colors flex items-center border-b-[1.5px] ${
-                    !cwd
-                      ? "text-cc-muted/50 border-transparent cursor-not-allowed"
-                      : activeTab === "editor"
-                        ? "text-cc-fg border-cc-primary cursor-pointer"
-                        : "text-cc-muted hover:text-cc-fg border-transparent cursor-pointer"
-                  }`}
-                  title={!cwd ? "Editor unavailable while session is reconnecting" : "Editor"}
-                  aria-label="Editor tab"
-                >
-                  Editor
-                </button>
-              )}
           </div>
         )}
 

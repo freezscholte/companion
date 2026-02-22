@@ -160,7 +160,7 @@ export function createRoutes(
         if (repoInfo) {
           const fetchResult = gitUtils.gitFetch(repoInfo.repoRoot);
           if (!fetchResult.success) {
-            throw new Error(`git fetch failed before session create: ${fetchResult.output}`);
+            console.warn(`[routes] git fetch failed (non-fatal): ${fetchResult.output}`);
           }
 
           if (repoInfo.currentBranch !== body.branch) {
@@ -425,13 +425,9 @@ export function createRoutes(
             await emitProgress(stream, "fetching_git", "Fetching from remote...", "in_progress");
             const fetchResult = gitUtils.gitFetch(repoInfo.repoRoot);
             if (!fetchResult.success) {
-              await stream.writeSSE({
-                event: "error",
-                data: JSON.stringify({ error: `git fetch failed: ${fetchResult.output}`, step: "fetching_git" }),
-              });
-              return;
+              console.warn(`[routes] git fetch failed (non-fatal): ${fetchResult.output}`);
             }
-            await emitProgress(stream, "fetching_git", "Fetch complete", "done");
+            await emitProgress(stream, "fetching_git", fetchResult.success ? "Fetch complete" : "Fetch skipped (offline?)", "done");
 
             if (repoInfo.currentBranch !== body.branch) {
               await emitProgress(stream, "checkout_branch", `Checking out ${body.branch}...`, "in_progress");

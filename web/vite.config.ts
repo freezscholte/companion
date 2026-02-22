@@ -16,6 +16,8 @@ export default defineConfig({
         // Precache all build output: JS chunks (incl. lazy-loaded), CSS, HTML,
         // icons, SVGs, and the two terminal Nerd Font woff2 files (~2.4MB total)
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+        // Main bundle exceeds default 2 MiB — raise to 5 MiB
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         skipWaiting: true,
         clientsClaim: true,
         // Hash routing: all navigations hit "/" → serve index.html from cache

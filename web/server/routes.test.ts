@@ -423,7 +423,9 @@ describe("POST /api/sessions/create", () => {
     );
   });
 
-  it("returns 500 and does not launch when fetch fails before create", async () => {
+  it("proceeds with session creation when fetch fails (non-fatal)", async () => {
+    // git fetch failure should not block session creation — the user may be
+    // offline or have SSH key issues, but still wants to work locally.
     vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
       repoRoot: "/repo",
       repoName: "my-repo",
@@ -442,13 +444,8 @@ describe("POST /api/sessions/create", () => {
       body: JSON.stringify({ cwd: "/repo", branch: "main" }),
     });
 
-    expect(res.status).toBe(500);
-    const json = await res.json();
-    expect(json).toEqual({
-      error: "git fetch failed before session create: network error",
-    });
-    expect(gitUtils.gitPull).not.toHaveBeenCalled();
-    expect(launcher.launch).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(launcher.launch).toHaveBeenCalled();
   });
 
   it("proceeds with session creation when pull fails (non-fatal)", async () => {

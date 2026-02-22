@@ -1,25 +1,97 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
+import type { Extension } from "@codemirror/state";
+import { javascript } from "@codemirror/lang-javascript";
+import { css } from "@codemirror/lang-css";
+import { html } from "@codemirror/lang-html";
+import { json } from "@codemirror/lang-json";
+import { markdown } from "@codemirror/lang-markdown";
+import { python } from "@codemirror/lang-python";
+import { rust } from "@codemirror/lang-rust";
+import { cpp } from "@codemirror/lang-cpp";
+import { java } from "@codemirror/lang-java";
+import { sql } from "@codemirror/lang-sql";
+import { xml } from "@codemirror/lang-xml";
+import { yaml } from "@codemirror/lang-yaml";
 import { api, type TreeNode } from "../api.js";
 import { useStore } from "../store.js";
 
-interface SessionEditorPaneProps {
-  sessionId: string;
+const IMAGE_EXTENSIONS = new Set([
+  "png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "ico", "bmp", "tiff", "tif",
+]);
+
+function isImageFile(filePath: string): boolean {
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+  return IMAGE_EXTENSIONS.has(ext);
 }
 
-function flattenFiles(nodes: TreeNode[]): TreeNode[] {
-  const out: TreeNode[] = [];
-  for (const node of nodes) {
-    if (node.type === "file") {
-      out.push(node);
-      continue;
-    }
-    if (node.children?.length) {
-      out.push(...flattenFiles(node.children));
-    }
+/** Map file extension to a CodeMirror language extension. */
+function langForPath(filePath: string): Extension | null {
+  const ext = filePath.split(".").pop()?.toLowerCase();
+  switch (ext) {
+    case "js":
+    case "mjs":
+    case "cjs":
+      return javascript();
+    case "ts":
+    case "mts":
+    case "cts":
+      return javascript({ typescript: true });
+    case "jsx":
+      return javascript({ jsx: true });
+    case "tsx":
+      return javascript({ jsx: true, typescript: true });
+    case "css":
+    case "scss":
+    case "less":
+      return css();
+    case "html":
+    case "htm":
+    case "svelte":
+    case "vue":
+      return html();
+    case "json":
+    case "jsonc":
+    case "json5":
+      return json();
+    case "md":
+    case "mdx":
+    case "markdown":
+      return markdown();
+    case "py":
+    case "pyw":
+    case "pyi":
+      return python();
+    case "rs":
+      return rust();
+    case "c":
+    case "h":
+    case "cpp":
+    case "cxx":
+    case "cc":
+    case "hpp":
+    case "hxx":
+      return cpp();
+    case "java":
+      return java();
+    case "sql":
+      return sql();
+    case "xml":
+    case "xsl":
+    case "xsd":
+    case "svg":
+      return xml();
+    case "yml":
+    case "yaml":
+      return yaml();
+    default:
+      return null;
   }
-  return out;
+}
+
+interface SessionEditorPaneProps {
+  sessionId: string;
 }
 
 function relPath(cwd: string, path: string): string {
@@ -92,13 +164,33 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [content, setContent] = useState("");
   const [originalContent, setOriginalContent] = useState("");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const imageUrlRef = useRef<string | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   const dirty = content !== originalContent;
-  const files = useMemo(() => flattenFiles(tree), [tree]);
+
+  // Keep ref in sync so unmount cleanup can access current value
+  useEffect(() => { imageUrlRef.current = imageUrl; }, [imageUrl]);
+
+  // Revoke object URL on component unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (imageUrlRef.current) URL.revokeObjectURL(imageUrlRef.current);
+    };
+  }, []);
+
+  // CodeMirror extensions with language detection
+  const extensions = useMemo(() => {
+    if (!selectedPath) return [EditorView.lineWrapping];
+    const exts: Extension[] = [EditorView.lineWrapping];
+    const lang = langForPath(selectedPath);
+    if (lang) exts.push(lang);
+    return exts;
+  }, [selectedPath]);
 
   useEffect(() => {
     if (!cwd) {
@@ -111,8 +203,6 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
     api.getFileTree(cwd).then((res) => {
       if (cancelled) return;
       setTree(res.tree);
-      const firstFile = flattenFiles(res.tree)[0];
-      setSelectedPath(firstFile?.path ?? null);
     }).catch((err) => {
       if (cancelled) return;
       setError(err instanceof Error ? err.message : "Failed to load file tree");
@@ -126,27 +216,46 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
     };
   }, [cwd]);
 
+  // Load file content (or image blob) when a file is selected
   useEffect(() => {
     if (!selectedPath) {
       setContent("");
       setOriginalContent("");
+      setImageUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
       return;
     }
     let cancelled = false;
     setLoadingFile(true);
     setError(null);
-    api.readFile(selectedPath).then((res) => {
-      if (cancelled) return;
-      setContent(res.content);
-      setOriginalContent(res.content);
-    }).catch((err) => {
-      if (cancelled) return;
-      setError(err instanceof Error ? err.message : "Failed to read file");
+
+    if (isImageFile(selectedPath)) {
       setContent("");
       setOriginalContent("");
-    }).finally(() => {
-      if (!cancelled) setLoadingFile(false);
-    });
+      api.getFileBlob(selectedPath).then((url) => {
+        if (cancelled) { URL.revokeObjectURL(url); return; }
+        setImageUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return url; });
+      }).catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Failed to load image");
+        setImageUrl(null);
+      }).finally(() => {
+        if (!cancelled) setLoadingFile(false);
+      });
+    } else {
+      setImageUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
+      api.readFile(selectedPath).then((res) => {
+        if (cancelled) return;
+        setContent(res.content);
+        setOriginalContent(res.content);
+      }).catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Failed to read file");
+        setContent("");
+        setOriginalContent("");
+      }).finally(() => {
+        if (!cancelled) setLoadingFile(false);
+      });
+    }
     return () => {
       cancelled = true;
     };
@@ -178,6 +287,20 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [saveCurrentFile]);
 
+  const handleBack = useCallback(() => {
+    if (dirty && !window.confirm("Discard unsaved changes?")) return;
+    setSelectedPath(null);
+    setContent("");
+    setOriginalContent("");
+    setImageUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
+    setError(null);
+  }, [dirty]);
+
+  const handleSelectFile = useCallback((nextPath: string) => {
+    if (dirty && !window.confirm("Discard unsaved changes?")) return;
+    setSelectedPath(nextPath);
+  }, [dirty]);
+
   if (!cwd) {
     return (
       <div className="h-full flex items-center justify-center p-4 text-sm text-cc-muted">
@@ -186,41 +309,65 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
     );
   }
 
-  return (
-    <div className="h-full min-h-0 flex bg-cc-bg">
-      <aside className="w-[280px] shrink-0 border-r border-cc-border bg-cc-sidebar/60 flex flex-col min-h-0">
-        <div className="px-3 py-2 border-b border-cc-border text-xs text-cc-muted font-medium">Files</div>
-        <div className="flex-1 min-h-0 overflow-auto p-1.5">
-          {loadingTree && <div className="px-2 py-2 text-xs text-cc-muted">Loading files...</div>}
-          {!loadingTree && files.length === 0 && <div className="px-2 py-2 text-xs text-cc-muted">No editable files found.</div>}
-          {!loadingTree && tree.map((node) => (
-            <TreeEntry
-              key={node.path}
-              node={node}
-              depth={0}
-              cwd={cwd}
-              selectedPath={selectedPath}
-              onSelect={(nextPath) => {
-                if (dirty && !window.confirm("Discard unsaved changes?")) return;
-                setSelectedPath(nextPath);
-              }}
-            />
-          ))}
-        </div>
-      </aside>
+  const isImage = selectedPath ? isImageFile(selectedPath) : false;
 
-      <div className="flex-1 min-h-0 flex flex-col">
-        <div className="px-3 py-2 border-b border-cc-border bg-cc-sidebar flex items-center justify-between gap-3">
+  // ── Tree panel (reused in both desktop sidebar and mobile master view) ──
+  const treePanel = (
+    <div className="flex-1 min-h-0 flex flex-col">
+      <div className="shrink-0 px-3 py-2 border-b border-cc-border text-xs text-cc-muted font-medium">Files</div>
+      <div className="flex-1 min-h-0 overflow-auto p-1.5">
+        {loadingTree && <div className="px-2 py-2 text-xs text-cc-muted">Loading files...</div>}
+        {!loadingTree && tree.length === 0 && !error && (
+          <div className="px-2 py-2 text-xs text-cc-muted">No editable files found.</div>
+        )}
+        {!loadingTree && error && !selectedPath && (
+          <div className="m-2 px-3 py-2 rounded-lg bg-cc-error/10 border border-cc-error/30 text-xs text-cc-error">
+            {error}
+          </div>
+        )}
+        {!loadingTree && tree.map((node) => (
+          <TreeEntry
+            key={node.path}
+            node={node}
+            depth={0}
+            cwd={cwd}
+            selectedPath={selectedPath}
+            onSelect={handleSelectFile}
+          />
+        ))}
+      </div>
+    </div>
+  );
+
+  // ── Editor / image viewer panel ──
+  const editorPanel = selectedPath ? (
+    <div className="flex-1 min-h-0 flex flex-col">
+      <div className="shrink-0 px-3 py-2 border-b border-cc-border bg-cc-sidebar flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          {/* Back button — mobile only */}
+          <button
+            type="button"
+            onClick={handleBack}
+            className="sm:hidden flex items-center justify-center w-8 h-8 rounded text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer shrink-0"
+            aria-label="Back to file tree"
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+              <path fillRule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clipRule="evenodd" />
+            </svg>
+          </button>
           <div className="min-w-0">
-            <p className="text-[11px] text-cc-muted truncate">{selectedPath ? relPath(cwd, selectedPath) : "No file selected"}</p>
+            <p className="text-[11px] text-cc-muted truncate">{relPath(cwd, selectedPath)}</p>
             {dirty && <p className="text-[10px] text-amber-500">Unsaved changes</p>}
             {saved && <p className="text-[10px] text-cc-success">Saved</p>}
           </div>
+        </div>
+        {/* Save button — hidden for images (read-only) */}
+        {!isImage && (
           <button
             type="button"
             onClick={saveCurrentFile}
             disabled={!selectedPath || saving || loadingFile || !dirty}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors shrink-0 ${
               !selectedPath || saving || loadingFile || !dirty
                 ? "bg-cc-hover text-cc-muted cursor-not-allowed"
                 : "bg-cc-primary text-white hover:bg-cc-primary-hover cursor-pointer"
@@ -228,35 +375,62 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
           >
             {saving ? "Saving..." : "Save"}
           </button>
-        </div>
+        )}
+      </div>
 
-        {error && (
-          <div className="m-3 px-3 py-2 rounded-lg bg-cc-error/10 border border-cc-error/30 text-xs text-cc-error">
-            {error}
+      {error && (
+        <div className="m-3 px-3 py-2 rounded-lg bg-cc-error/10 border border-cc-error/30 text-xs text-cc-error">
+          {error}
+        </div>
+      )}
+
+      <div className="flex-1 min-h-0">
+        {loadingFile ? (
+          <div className="h-full flex items-center justify-center text-sm text-cc-muted">Loading file...</div>
+        ) : imageUrl ? (
+          <div className="h-full flex items-center justify-center p-4 bg-cc-bg overflow-auto">
+            <img
+              src={imageUrl}
+              alt={relPath(cwd, selectedPath)}
+              className="max-w-full max-h-full object-contain rounded"
+            />
+          </div>
+        ) : (
+          <CodeMirror
+            value={content}
+            onChange={(value: string) => setContent(value)}
+            extensions={extensions}
+            theme={darkMode ? "dark" : "light"}
+            basicSetup={{
+              foldGutter: true,
+              dropCursor: false,
+              allowMultipleSelections: false,
+            }}
+            className="h-full text-sm"
+            height="100%"
+          />
+        )}
+      </div>
+    </div>
+  ) : null;
+
+  return (
+    <div className="h-full min-h-0 flex bg-cc-bg">
+      {/* Desktop: side-by-side */}
+      <aside className="hidden sm:flex w-[240px] shrink-0 border-r border-cc-border bg-cc-sidebar/60 flex-col min-h-0">
+        {treePanel}
+      </aside>
+      <div className="hidden sm:flex flex-1 min-h-0 flex-col">
+        {editorPanel || (
+          <div className="h-full flex items-center justify-center text-sm text-cc-muted">
+            Select a file to start editing.
           </div>
         )}
+      </div>
 
-        <div className="flex-1 min-h-0">
-          {loadingFile ? (
-            <div className="h-full flex items-center justify-center text-sm text-cc-muted">Loading file...</div>
-          ) : selectedPath ? (
-            <CodeMirror
-              value={content}
-              onChange={(value: string) => setContent(value)}
-              extensions={[EditorView.lineWrapping]}
-              theme={darkMode ? "dark" : "light"}
-              basicSetup={{
-                foldGutter: true,
-                dropCursor: false,
-                allowMultipleSelections: false,
-              }}
-              className="h-full text-sm"
-              height="100%"
-            />
-          ) : (
-            <div className="h-full flex items-center justify-center text-sm text-cc-muted">Select a file to start editing.</div>
-          )}
-        </div>
+      {/* Mobile: master/detail */}
+      <div className="flex sm:hidden flex-1 min-h-0 flex-col">
+        {selectedPath ? editorPanel : treePanel}
       </div>
     </div>
   );

@@ -16,8 +16,7 @@ interface MockStoreState {
   setSidebarOpen: ReturnType<typeof vi.fn>;
   taskPanelOpen: boolean;
   setTaskPanelOpen: ReturnType<typeof vi.fn>;
-  editorTabEnabled: boolean;
-  activeTab: "chat" | "diff" | "terminal" | "processes" | "files" | "editor";
+  activeTab: "chat" | "diff" | "terminal" | "processes" | "editor";
   setActiveTab: ReturnType<typeof vi.fn>;
   markChatTabReentry: ReturnType<typeof vi.fn>;
   quickTerminalOpen: boolean;
@@ -41,7 +40,6 @@ function resetStore(overrides: Partial<MockStoreState> = {}) {
     setSidebarOpen: vi.fn(),
     taskPanelOpen: false,
     setTaskPanelOpen: vi.fn(),
-    editorTabEnabled: true,
     activeTab: "chat",
     setActiveTab: vi.fn(),
     markChatTabReentry: vi.fn(),
@@ -148,10 +146,10 @@ describe("TopBar", () => {
     expect(storeState.openQuickTerminal).not.toHaveBeenCalled();
   });
 
-  it("hides editor tab when editor feature is disabled in settings", () => {
-    resetStore({ editorTabEnabled: false });
+  it("always shows editor tab", () => {
+    // Editor tab is always present (replaced the old Files tab)
     render(<TopBar />);
-    expect(screen.queryByRole("button", { name: "Editor tab" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Editor tab" })).toBeInTheDocument();
   });
 
   it("keeps terminal tab active when clicking shell while already active", () => {
@@ -206,43 +204,18 @@ describe("TopBar", () => {
     expect(screen.getByRole("button", { name: "Session tab" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Diffs tab" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Shell tab" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Processes tab" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Editor tab" })).toBeInTheDocument();
   });
 
-  it("renders Files tab with accessible label", () => {
-    // Files tab should always be visible with an accessible name
-    render(<TopBar />);
-    expect(screen.getByRole("button", { name: "Files tab" })).toBeInTheDocument();
-  });
-
-  it("disables Files tab when cwd is null", () => {
-    // Files tab requires cwd — should be disabled when cwd is unavailable
-    resetStore({
-      sessions: new Map([["s1", {}]]),
-      sdkSessions: [],
-    });
-    render(<TopBar />);
-
-    const btn = screen.getByRole("button", { name: "Files tab" });
-    expect(btn).toBeDisabled();
-    fireEvent.click(btn);
-    expect(storeState.setActiveTab).not.toHaveBeenCalled();
-  });
-
-  it("activates files tab on click when cwd is available", () => {
-    // Clicking Files tab should call setActiveTab with "files"
-    render(<TopBar />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Files tab" }));
-    expect(storeState.setActiveTab).toHaveBeenCalledWith("files");
-  });
-
-  it("cycles through all tabs including files on Cmd+J", () => {
-    // Starting from processes tab, Cmd+J should cycle to files
+  it("cycles from processes to editor on Cmd+J", () => {
+    // Tabs: chat, diff, terminal, processes, editor
+    // Starting from processes, Cmd+J should cycle to editor
     resetStore({ activeTab: "processes" });
     render(<TopBar />);
 
     fireEvent.keyDown(window, { key: "j", metaKey: true });
-    expect(storeState.setActiveTab).toHaveBeenCalledWith("files");
+    expect(storeState.setActiveTab).toHaveBeenCalledWith("editor");
   });
 
   it("passes axe accessibility checks", async () => {

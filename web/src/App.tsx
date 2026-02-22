@@ -27,7 +27,7 @@ const EnvManager = lazy(() => import("./components/EnvManager.js").then((m) => (
 const CronManager = lazy(() => import("./components/CronManager.js").then((m) => ({ default: m.CronManager })));
 const TerminalPage = lazy(() => import("./components/TerminalPage.js").then((m) => ({ default: m.TerminalPage })));
 const ProcessPanel = lazy(() => import("./components/ProcessPanel.js").then((m) => ({ default: m.ProcessPanel })));
-const FilesPanel = lazy(() => import("./components/FilesPanel.js"));
+
 
 function LazyFallback() {
   return (
@@ -52,8 +52,6 @@ export default function App() {
   const taskPanelOpen = useStore((s) => s.taskPanelOpen);
   const homeResetKey = useStore((s) => s.homeResetKey);
   const activeTab = useStore((s) => s.activeTab);
-  const editorTabEnabled = useStore((s) => s.editorTabEnabled);
-  const setEditorTabEnabled = useStore((s) => s.setEditorTabEnabled);
   const setActiveTab = useStore((s) => s.setActiveTab);
   const sessionCreating = useStore((s) => s.sessionCreating);
   const sessionCreatingBackend = useStore((s) => s.sessionCreatingBackend);
@@ -79,17 +77,12 @@ export default function App() {
     document.documentElement.classList.toggle("dark", darkMode);
   }, [darkMode]);
 
+  // Migrate legacy "files" tab to "editor"
   useEffect(() => {
-    api.getSettings().then((settings) => {
-      setEditorTabEnabled(settings.editorTabEnabled);
-    }).catch(() => {});
-  }, [setEditorTabEnabled]);
-
-  useEffect(() => {
-    if (!editorTabEnabled && activeTab === "editor") {
-      setActiveTab("chat");
+    if ((activeTab as string) === "files") {
+      setActiveTab("editor");
     }
-  }, [editorTabEnabled, activeTab, setActiveTab]);
+  }, [activeTab, setActiveTab]);
 
   // Capture the localStorage-restored session ID during render (before any effects run)
   // so the mount logic can use it even if the hash-sync branch would clear it.
@@ -247,11 +240,9 @@ export default function App() {
                     )
                     : activeTab === "processes"
                       ? <Suspense fallback={<LazyFallback />}><ProcessPanel sessionId={currentSessionId} /></Suspense>
-                      : activeTab === "files"
-                        ? <Suspense fallback={<LazyFallback />}><FilesPanel sessionId={currentSessionId} /></Suspense>
-                        : activeTab === "editor" && editorTabEnabled
-                          ? <SessionEditorPane sessionId={currentSessionId} />
-                          : (
+                      : activeTab === "editor"
+                        ? <SessionEditorPane sessionId={currentSessionId} />
+                        : (
                         <SessionTerminalDock sessionId={currentSessionId} suppressPanel>
                           {activeTab === "diff"
                             ? <DiffPanel sessionId={currentSessionId} />
