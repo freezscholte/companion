@@ -732,7 +732,7 @@ export function HomePage() {
   const canSend = text.trim().length > 0 && !sending;
 
   return (
-    <div className="flex-1 h-full flex items-start justify-center px-3 sm:px-4 pt-6 sm:pt-8 pb-6 pb-safe overflow-y-auto">
+    <div className="flex-1 h-full flex items-start justify-center px-3 sm:px-4 pt-6 sm:pt-8 pb-6 pb-safe overflow-y-auto overscroll-y-contain">
       <div className="w-full max-w-2xl">
         {/* Logo + Title */}
         <div className="flex flex-col items-center justify-center mb-3 sm:mb-4">

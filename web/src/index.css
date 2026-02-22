@@ -195,6 +195,14 @@
   }
 }
 
+/* Lock html/body so iOS PWA doesn't rubber-band the whole page */
+html,
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+  height: 100%;
+}
+
 /* Eliminate 300ms tap delay on interactive elements */
 button,
 [role="button"],
