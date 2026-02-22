@@ -847,6 +847,18 @@ export const api = {
     get<{ path: string; content: string }>(
       `/fs/read?path=${encodeURIComponent(path)}`,
     ),
+  getFileBlob: async (path: string): Promise<string> => {
+    const res = await fetch(`${BASE}/fs/raw?path=${encodeURIComponent(path)}`, {
+      headers: { ...getAuthHeaders() },
+    });
+    if (!res.ok) {
+      handle401(res.status);
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error((err as { error?: string }).error || res.statusText);
+    }
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  },
   writeFile: (path: string, content: string) =>
     put<{ ok: boolean; path: string }>("/fs/write", { path, content }),
   getFileDiff: (path: string, base?: "last-commit" | "default-branch") =>
