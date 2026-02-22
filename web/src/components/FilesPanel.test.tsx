@@ -6,11 +6,13 @@ import type { TreeNode } from "../api.js";
 // ---- Mock API ----
 const mockGetFileTree = vi.fn();
 const mockReadFile = vi.fn();
+const mockGetFileBlob = vi.fn();
 
 vi.mock("../api.js", () => ({
   api: {
     getFileTree: (...args: unknown[]) => mockGetFileTree(...args),
     readFile: (...args: unknown[]) => mockReadFile(...args),
+    getFileBlob: (...args: unknown[]) => mockGetFileBlob(...args),
   },
 }));
 
@@ -49,6 +51,7 @@ const sampleTree: TreeNode[] = [
     ],
   },
   { name: "README.md", path: "/project/README.md", type: "file" },
+  { name: "logo.png", path: "/project/logo.png", type: "file" },
 ];
 
 /** Helper: check that a CodeMirror editor was mounted in the container */
@@ -56,11 +59,19 @@ function hasCmEditor(container: HTMLElement): boolean {
   return container.querySelector(".cm-editor") !== null;
 }
 
+// Mock URL.createObjectURL / revokeObjectURL for image blob tests
+const mockRevokeObjectURL = vi.fn();
+beforeAll(() => {
+  globalThis.URL.createObjectURL = vi.fn(() => "blob:http://localhost/fake-blob");
+  globalThis.URL.revokeObjectURL = mockRevokeObjectURL;
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   resetStore();
   mockGetFileTree.mockResolvedValue({ path: "/project", tree: sampleTree });
   mockReadFile.mockResolvedValue({ path: "/project/README.md", content: "# Hello World" });
+  mockGetFileBlob.mockResolvedValue("blob:http://localhost/fake-blob");
 });
 
 // Note: jsdom renders both desktop (hidden sm:flex) and mobile (flex sm:hidden) layouts
@@ -278,6 +289,101 @@ describe("FilesPanel", () => {
   });
 });
 
+describe("FilesPanel image preview", () => {
+  it("renders image preview for image files instead of CodeMirror", async () => {
+    // Clicking an image file should fetch a blob URL via getFileBlob and render <img>
+    const { container } = render(<FilesPanel sessionId="s1" />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("logo.png").length).toBeGreaterThanOrEqual(1);
+    });
+
+    fireEvent.click(screen.getAllByText("logo.png")[0]);
+
+    await waitFor(() => {
+      expect(mockGetFileBlob).toHaveBeenCalledWith("/project/logo.png");
+    });
+
+    // Should render an <img> element, not a CodeMirror editor
+    await waitFor(() => {
+      const img = container.querySelector("img");
+      expect(img).not.toBeNull();
+      expect(img?.getAttribute("alt")).toBe("logo.png");
+    });
+
+    // readFile should NOT have been called for the image
+    expect(mockReadFile).not.toHaveBeenCalledWith("/project/logo.png");
+    // CodeMirror should not be mounted
+    expect(hasCmEditor(container)).toBe(false);
+  });
+
+  it("falls back to CodeMirror for non-image files", async () => {
+    // .ts files should still use CodeMirror, not the image viewer
+    const { container } = render(<FilesPanel sessionId="s1" />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("README.md").length).toBeGreaterThanOrEqual(1);
+    });
+
+    fireEvent.click(screen.getAllByText("README.md")[0]);
+
+    await waitFor(() => {
+      expect(mockReadFile).toHaveBeenCalledWith("/project/README.md");
+    });
+
+    await waitFor(() => {
+      expect(hasCmEditor(container)).toBe(true);
+    });
+
+    // getFileBlob should NOT have been called for text files
+    expect(mockGetFileBlob).not.toHaveBeenCalled();
+    // No <img> with alt matching the file
+    expect(container.querySelector("img")).toBeNull();
+  });
+
+  it("revokes object URL on back navigation", async () => {
+    // Navigating back from an image should revoke the blob URL to prevent memory leaks
+    render(<FilesPanel sessionId="s1" />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("logo.png").length).toBeGreaterThanOrEqual(1);
+    });
+
+    fireEvent.click(screen.getAllByText("logo.png")[0]);
+
+    await waitFor(() => {
+      expect(mockGetFileBlob).toHaveBeenCalledWith("/project/logo.png");
+    });
+
+    // Clear calls so we can track only the back-navigation revoke
+    mockRevokeObjectURL.mockClear();
+
+    const backBtns = screen.getAllByLabelText("Back to file tree");
+    fireEvent.click(backBtns[0]);
+
+    await waitFor(() => {
+      expect(mockRevokeObjectURL).toHaveBeenCalledWith("blob:http://localhost/fake-blob");
+    });
+  });
+
+  it("shows error when image blob fetch fails", async () => {
+    // A failed getFileBlob should display an error message in the file viewer
+    mockGetFileBlob.mockRejectedValue(new Error("Image load error"));
+
+    render(<FilesPanel sessionId="s1" />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("logo.png").length).toBeGreaterThanOrEqual(1);
+    });
+
+    fireEvent.click(screen.getAllByText("logo.png")[0]);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Image load error").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+});
+
 describe("FilesPanel accessibility", () => {
   it("passes axe checks for tree view", async () => {
     const { axe } = await import("vitest-axe");
@@ -316,6 +422,25 @@ describe("FilesPanel accessibility", () => {
 
     await waitFor(() => {
       expect(screen.getAllByText("No files found.").length).toBeGreaterThanOrEqual(1);
+    });
+
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+
+  it("passes axe checks for image viewer", async () => {
+    // Image preview state should also pass accessibility checks (img has alt text)
+    const { axe } = await import("vitest-axe");
+    const { container } = render(<FilesPanel sessionId="s1" />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("logo.png").length).toBeGreaterThanOrEqual(1);
+    });
+
+    fireEvent.click(screen.getAllByText("logo.png")[0]);
+
+    await waitFor(() => {
+      expect(container.querySelector("img")).not.toBeNull();
     });
 
     const results = await axe(container);

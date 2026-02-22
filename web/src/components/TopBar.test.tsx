@@ -235,8 +235,8 @@ describe("TopBar", () => {
   });
 
   it("cycles through all tabs including files on Cmd+J", () => {
-    // Starting from processes tab, Cmd+J should cycle to files
-    resetStore({ activeTab: "processes" });
+    // Starting from terminal tab, Cmd+J should cycle to files
+    resetStore({ activeTab: "terminal" });
     render(<TopBar />);
 
     fireEvent.keyDown(window, { key: "j", metaKey: true });

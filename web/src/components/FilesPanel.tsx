@@ -17,6 +17,15 @@ import { yaml } from "@codemirror/lang-yaml";
 import { api, type TreeNode } from "../api.js";
 import { useStore } from "../store.js";
 
+const IMAGE_EXTENSIONS = new Set([
+  "png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "ico", "bmp", "tiff", "tif",
+]);
+
+function isImageFile(filePath: string): boolean {
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+  return IMAGE_EXTENSIONS.has(ext);
+}
+
 /** Map file extension to a CodeMirror language extension. */
 function langForPath(filePath: string): Extension | null {
   const ext = filePath.split(".").pop()?.toLowerCase();
@@ -188,6 +197,7 @@ export function FilesPanel({ sessionId }: FilesPanelProps) {
   const [loadingTree, setLoadingTree] = useState(true);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string>("");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -213,31 +223,51 @@ export function FilesPanel({ sessionId }: FilesPanelProps) {
     return () => { cancelled = true; };
   }, [cwd]);
 
-  // Load file content when a file is selected
+  // Load file content (or image blob) when a file is selected
   useEffect(() => {
     if (!selectedFilePath) {
       setFileContent("");
+      setImageUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
       return;
     }
     let cancelled = false;
     setLoadingFile(true);
     setError(null);
-    api.readFile(selectedFilePath).then((res) => {
-      if (cancelled) return;
-      setFileContent(res.content);
-    }).catch((err) => {
-      if (cancelled) return;
-      setError(err instanceof Error ? err.message : "Failed to read file");
+
+    if (isImageFile(selectedFilePath)) {
       setFileContent("");
-    }).finally(() => {
-      if (!cancelled) setLoadingFile(false);
-    });
-    return () => { cancelled = true; };
+      api.getFileBlob(selectedFilePath).then((url) => {
+        if (cancelled) { URL.revokeObjectURL(url); return; }
+        setImageUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return url; });
+      }).catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Failed to load image");
+        setImageUrl(null);
+      }).finally(() => {
+        if (!cancelled) setLoadingFile(false);
+      });
+    } else {
+      setImageUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
+      api.readFile(selectedFilePath).then((res) => {
+        if (cancelled) return;
+        setFileContent(res.content);
+      }).catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Failed to read file");
+        setFileContent("");
+      }).finally(() => {
+        if (!cancelled) setLoadingFile(false);
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
   }, [selectedFilePath]);
 
   const handleBack = useCallback(() => {
     setSelectedFilePath(null);
     setFileContent("");
+    setImageUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
     setError(null);
   }, []);
 
@@ -247,6 +277,7 @@ export function FilesPanel({ sessionId }: FilesPanelProps) {
     setError(null);
     setSelectedFilePath(null);
     setFileContent("");
+    setImageUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
     api.getFileTree(cwd).then((res) => {
       setTree(res.tree);
     }).catch((err) => {
@@ -338,6 +369,14 @@ export function FilesPanel({ sessionId }: FilesPanelProps) {
       <div className="flex-1 min-h-0">
         {loadingFile ? (
           <div className="h-full flex items-center justify-center text-sm text-cc-muted">Loading file...</div>
+        ) : imageUrl ? (
+          <div className="h-full flex items-center justify-center p-4 bg-cc-bg overflow-auto">
+            <img
+              src={imageUrl}
+              alt={relPath(cwd, selectedFilePath)}
+              className="max-w-full max-h-full object-contain rounded"
+            />
+          </div>
         ) : (
           <FileContentViewer content={fileContent} filePath={selectedFilePath} darkMode={darkMode} />
         )}
