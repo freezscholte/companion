@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serveStatic } from "hono/bun";
+import { cacheControlMiddleware } from "./cache-headers.js";
 import { createRoutes } from "./routes.js";
 import { CliLauncher } from "./cli-launcher.js";
 import { WsBridge } from "./ws-bridge.js";
@@ -126,6 +127,7 @@ app.route("/api", createRoutes(launcher, wsBridge, sessionStore, worktreeTracker
 // In production, serve built frontend using absolute path (works when installed as npm package)
 if (process.env.NODE_ENV === "production") {
   const distDir = resolve(packageRoot, "dist");
+  app.use("/*", cacheControlMiddleware());
   app.use("/*", serveStatic({ root: distDir }));
   app.get("/*", serveStatic({ path: resolve(distDir, "index.html") }));
 }

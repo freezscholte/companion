@@ -195,12 +195,21 @@
   }
 }
 
-/* Lock html/body so iOS PWA doesn't rubber-band the whole page */
-html,
-body {
+/* Lock html/body so iOS PWA doesn't rubber-band the whole page.
+   min-height on html compensates for the upward shift caused by
+   apple-mobile-web-app-status-bar-style: black-translucent — iOS moves
+   the document up behind the status bar, creating an equal gap at the
+   bottom where the html background shows through. Adding the status bar
+   height back fills that gap. */
+html {
+  min-height: calc(100% + env(safe-area-inset-top));
   overflow: hidden;
   overscroll-behavior: none;
+}
+body {
   height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 /* Eliminate 300ms tap delay on interactive elements */
@@ -219,6 +228,12 @@ select {
 }
 .pb-safe {
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+}
+/* Like pb-safe but only adds the raw safe-area inset (no minimum).
+   Use on elements that sit directly above the keyboard (e.g. Composer)
+   so there's no gap when the iOS keyboard is open. */
+.pb-safe-only {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 @media (min-width: 640px) {
   .pb-safe {

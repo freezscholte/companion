@@ -366,6 +366,26 @@ describe("FilesPanel image preview", () => {
     });
   });
 
+  it("revokes object URL on component unmount", async () => {
+    // Unmounting the component (e.g. switching tabs) should revoke the blob URL
+    const { unmount } = render(<FilesPanel sessionId="s1" />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("logo.png").length).toBeGreaterThanOrEqual(1);
+    });
+
+    fireEvent.click(screen.getAllByText("logo.png")[0]);
+
+    await waitFor(() => {
+      expect(mockGetFileBlob).toHaveBeenCalledWith("/project/logo.png");
+    });
+
+    mockRevokeObjectURL.mockClear();
+    unmount();
+
+    expect(mockRevokeObjectURL).toHaveBeenCalledWith("blob:http://localhost/fake-blob");
+  });
+
   it("shows error when image blob fetch fails", async () => {
     // A failed getFileBlob should display an error message in the file viewer
     mockGetFileBlob.mockRejectedValue(new Error("Image load error"));

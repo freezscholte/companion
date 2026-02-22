@@ -165,7 +165,7 @@ export default function App() {
   }
 
   return (
-    <div className="h-[100dvh] flex font-sans-ui bg-cc-bg text-cc-fg antialiased pt-safe overflow-hidden overscroll-none">
+    <div className="fixed inset-0 flex font-sans-ui bg-cc-bg text-cc-fg antialiased pt-safe overflow-hidden overscroll-none">
       {/* Mobile overlay backdrop */}
       {sidebarOpen && (
         <div
@@ -177,8 +177,8 @@ export default function App() {
       {/* Sidebar — overlay on mobile, inline on desktop */}
       <div
         className={`
-          fixed md:relative z-40 md:z-auto
-          h-full shrink-0 transition-all duration-200
+          fixed inset-y-0 left-0 md:relative md:inset-auto z-40 md:z-auto
+          h-full shrink-0 transition-all duration-200 pt-safe md:pt-0
           ${sidebarOpen ? "w-full md:w-[260px] translate-x-0" : "w-0 -translate-x-full md:w-0 md:-translate-x-full"}
           overflow-hidden
         `}
@@ -304,8 +304,8 @@ export default function App() {
 
           <div
             className={`
-              fixed lg:relative z-40 lg:z-auto right-0 top-0
-              h-full shrink-0 transition-all duration-200
+              fixed inset-y-0 right-0 lg:relative lg:inset-auto z-40 lg:z-auto
+              h-full shrink-0 transition-all duration-200 pt-safe lg:pt-0
               ${taskPanelOpen ? "w-full lg:w-[320px] translate-x-0" : "w-0 translate-x-full lg:w-0 lg:translate-x-full"}
               overflow-hidden
             `}

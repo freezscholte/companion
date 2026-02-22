@@ -390,7 +390,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const canSend = text.trim().length > 0 && isConnected;
 
   return (
-    <div className="shrink-0 px-0 sm:px-6 pt-0 sm:pt-3 pb-safe bg-cc-input-bg sm:bg-transparent">
+    <div className="shrink-0 px-0 sm:px-6 pt-0 sm:pt-3 pb-5 sm:pb-0 bg-cc-input-bg sm:bg-transparent">
       <div className="max-w-3xl mx-auto">
         {/* Image thumbnails */}
         {images.length > 0 && (
@@ -671,7 +671,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
             />
 
             {/* Desktop secondary buttons + send/stop */}
-            <div className="mb-0.5 flex items-center gap-1.5 shrink-0">
+            <div className="mb-0.5 mr-1 flex items-center gap-1.5 shrink-0">
               {/* Bookmark + image: desktop only */}
               <button
                 onClick={() => {
