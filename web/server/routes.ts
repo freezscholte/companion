@@ -926,16 +926,16 @@ export function createRoutes(
 
     try {
       const { execSync } = await import("node:child_process");
-      // The taskId appears in the output file path of the background process,
-      // so pkill -f matches it reliably
+      // Scope pkill to the session's process tree (-P parent_pid) to avoid
+      // killing unrelated processes that happen to match the taskId hex string
       if (session.containerId) {
         containerManager.execInContainer(
           session.containerId,
-          ["sh", "-c", `pkill -f '${taskId}' 2>/dev/null; true`],
+          ["sh", "-c", `pkill -P ${session.pid} -f '${taskId}' 2>/dev/null; true`],
           5_000,
         );
       } else {
-        execSync(`pkill -f '${taskId}' 2>/dev/null; true`, {
+        execSync(`pkill -P ${session.pid} -f '${taskId}' 2>/dev/null; true`, {
           timeout: 5_000,
           encoding: "utf-8",
         });
@@ -969,11 +969,11 @@ export function createRoutes(
         if (session.containerId) {
           containerManager.execInContainer(
             session.containerId,
-            ["sh", "-c", `pkill -f '${taskId}' 2>/dev/null; true`],
+            ["sh", "-c", `pkill -P ${session.pid} -f '${taskId}' 2>/dev/null; true`],
             5_000,
           );
         } else {
-          execSync(`pkill -f '${taskId}' 2>/dev/null; true`, {
+          execSync(`pkill -P ${session.pid} -f '${taskId}' 2>/dev/null; true`, {
             timeout: 5_000,
             encoding: "utf-8",
           });

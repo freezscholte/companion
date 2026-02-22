@@ -29,19 +29,21 @@ export function LoginPage() {
     [token, setAuthToken],
   );
 
-  // Auto-login from ?token= URL param
+  // Auto-login from ?token= URL param (e.g. QR code scan)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlToken = params.get("token");
     if (urlToken) {
+      // Immediately strip token from URL before async verification so it
+      // doesn't linger in the address bar or browser history entries
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete("token");
+      window.history.replaceState({}, "", cleanUrl.toString());
+
       setLoading(true);
       verifyAuthToken(urlToken).then((valid) => {
         if (valid) {
           setAuthToken(urlToken);
-          // Strip token from URL to avoid leaking it
-          const url = new URL(window.location.href);
-          url.searchParams.delete("token");
-          window.history.replaceState({}, "", url.toString());
         } else {
           setError("Invalid token from URL");
           setLoading(false);
