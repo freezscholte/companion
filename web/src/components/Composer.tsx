@@ -405,7 +405,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 <button
                   onClick={() => removeImage(i)}
                   aria-label="Remove image"
-                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-cc-error text-white flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                  className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-cc-error text-white flex items-center justify-center text-[10px] opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity cursor-pointer"
                 >
                   <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5">
                     <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />

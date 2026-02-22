@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
@@ -116,7 +116,7 @@ function TreeEntry({ node, depth, cwd, selectedPath, onSelect }: TreeEntryProps)
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="w-full flex items-center gap-1.5 py-1.5 pr-2 text-left text-xs text-cc-muted hover:text-cc-fg hover:bg-cc-hover rounded cursor-pointer"
+          className="w-full flex items-center gap-1.5 py-2 pr-2 text-left text-xs text-cc-muted hover:text-cc-fg hover:bg-cc-hover rounded cursor-pointer"
           style={{ paddingLeft: `${8 + depth * 12}px` }}
           aria-label={`Toggle ${relPath(cwd, node.path)}`}
         >
@@ -142,7 +142,7 @@ function TreeEntry({ node, depth, cwd, selectedPath, onSelect }: TreeEntryProps)
     <button
       type="button"
       onClick={() => onSelect(node.path)}
-      className={`w-full py-1.5 pr-2 text-left text-xs rounded truncate cursor-pointer ${
+      className={`w-full py-2 pr-2 text-left text-xs rounded truncate cursor-pointer ${
         selected ? "bg-cc-active text-cc-fg" : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
       }`}
       style={{ paddingLeft: `${26 + depth * 12}px` }}
@@ -198,8 +198,19 @@ export function FilesPanel({ sessionId }: FilesPanelProps) {
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string>("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const imageUrlRef = useRef<string | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Keep ref in sync so unmount cleanup can access current value
+  useEffect(() => { imageUrlRef.current = imageUrl; }, [imageUrl]);
+
+  // Revoke object URL on component unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (imageUrlRef.current) URL.revokeObjectURL(imageUrlRef.current);
+    };
+  }, []);
 
   // Load the file tree when cwd changes
   useEffect(() => {
@@ -308,7 +319,7 @@ export function FilesPanel({ sessionId }: FilesPanelProps) {
           type="button"
           onClick={handleRefresh}
           disabled={loadingTree}
-          className="text-[11px] text-cc-muted hover:text-cc-fg disabled:opacity-50 transition-colors cursor-pointer"
+          className="text-[11px] px-2 py-1.5 text-cc-muted hover:text-cc-fg disabled:opacity-50 transition-colors cursor-pointer"
           aria-label="Refresh file tree"
         >
           {loadingTree ? "..." : "Refresh"}
@@ -352,7 +363,7 @@ export function FilesPanel({ sessionId }: FilesPanelProps) {
         <button
           type="button"
           onClick={handleBack}
-          className="sm:hidden flex items-center justify-center w-6 h-6 rounded text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer shrink-0"
+          className="sm:hidden flex items-center justify-center w-8 h-8 rounded text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer shrink-0"
           aria-label="Back to file tree"
         >
           <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">

@@ -113,7 +113,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
 
   return (
     <div className={`${embedded ? "h-full" : "h-[100dvh]"} bg-cc-bg text-cc-fg font-sans-ui antialiased overflow-y-auto`}>
-      <div className="max-w-5xl mx-auto px-4 sm:px-8 py-6 sm:py-10">
+      <div className="max-w-5xl mx-auto px-4 sm:px-8 py-6 sm:py-10 pb-safe">
         <div className="flex items-start justify-between gap-3 mb-6">
           <div>
             <h1 className="text-xl font-semibold text-cc-fg">Settings</h1>
@@ -131,7 +131,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                   navigateHome();
                 }
               }}
-              className="px-3 py-1.5 rounded-lg text-sm text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+              className="px-3 py-2.5 min-h-[44px] rounded-lg text-sm text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
             >
               Back
             </button>
@@ -178,7 +178,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
             <button
               type="button"
               onClick={() => setEditorTabEnabled((v) => !v)}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
+              className="w-full flex items-center justify-between px-3 py-3 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
             >
               <span>Enable Editor tab (CodeMirror)</span>
               <span className="text-xs text-cc-muted">{editorTabEnabled ? "On" : "Off"}</span>
@@ -223,7 +223,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
           <button
             type="button"
             onClick={toggleNotificationSound}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
+            className="w-full flex items-center justify-between px-3 py-3 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
           >
             <span>Sound</span>
             <span className="text-xs text-cc-muted">{notificationSound ? "On" : "Off"}</span>
@@ -242,7 +242,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                   setNotificationDesktop(false);
                 }
               }}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
+              className="w-full flex items-center justify-between px-3 py-3 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
             >
               <span>Desktop Alerts</span>
               <span className="text-xs text-cc-muted">{notificationDesktop ? "On" : "Off"}</span>
@@ -313,7 +313,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
           <button
             type="button"
             onClick={toggleDarkMode}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
+            className="w-full flex items-center justify-between px-3 py-3 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
           >
             <span>Theme</span>
             <span className="text-xs text-cc-muted">{darkMode ? "Dark" : "Light"}</span>
@@ -325,7 +325,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
           <button
             type="button"
             onClick={() => setDiffBase(diffBase === "last-commit" ? "default-branch" : "last-commit")}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
+            className="w-full flex items-center justify-between px-3 py-3 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
           >
             <span>Compare against</span>
             <span className="text-xs text-cc-muted">
@@ -349,7 +349,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
               setTelemetryPreferenceEnabled(next);
               setTelemetryEnabled(next);
             }}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
+            className="w-full flex items-center justify-between px-3 py-3 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
           >
             <span>Usage analytics and errors</span>
             <span className="text-xs text-cc-muted">{telemetryEnabled ? "On" : "Off"}</span>

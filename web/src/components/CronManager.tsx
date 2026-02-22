@@ -291,14 +291,14 @@ export function CronManager({ onClose, embedded = false }: Props) {
             {/* Toggle */}
             <button
               onClick={() => handleToggle(job.id)}
-              className={`relative w-8 h-[18px] rounded-full transition-colors cursor-pointer shrink-0 ${
+              className={`relative w-10 h-6 rounded-full transition-colors cursor-pointer shrink-0 ${
                 job.enabled ? "bg-cc-primary" : "bg-cc-border"
               }`}
               title={job.enabled ? "Disable" : "Enable"}
             >
               <span
-                className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${
-                  job.enabled ? "left-[16px]" : "left-[2px]"
+                className={`absolute top-[3px] w-[18px] h-[18px] rounded-full bg-white transition-transform ${
+                  job.enabled ? "left-[19px]" : "left-[3px]"
                 }`}
               />
             </button>
@@ -307,7 +307,7 @@ export function CronManager({ onClose, embedded = false }: Props) {
             {editingId === job.id ? (
               <button
                 onClick={cancelEdit}
-                className="text-xs text-cc-muted hover:text-cc-fg cursor-pointer"
+                className="text-xs px-2 py-1.5 text-cc-muted hover:text-cc-fg cursor-pointer"
               >
                 Cancel
               </button>
@@ -316,7 +316,7 @@ export function CronManager({ onClose, embedded = false }: Props) {
                 <button
                   onClick={() => handleRunNow(job.id)}
                   disabled={runningIds.has(job.id)}
-                  className={`text-xs cursor-pointer ${
+                  className={`text-xs px-2 py-1.5 cursor-pointer ${
                     runningIds.has(job.id)
                       ? "text-cc-muted cursor-not-allowed"
                       : "text-cc-primary hover:text-cc-primary-hover"
@@ -326,13 +326,13 @@ export function CronManager({ onClose, embedded = false }: Props) {
                 </button>
                 <button
                   onClick={() => startEdit(job)}
-                  className="text-xs text-cc-muted hover:text-cc-fg cursor-pointer"
+                  className="text-xs px-2 py-1.5 text-cc-muted hover:text-cc-fg cursor-pointer"
                 >
                   Edit
                 </button>
                 <button
                   onClick={() => handleDelete(job.id)}
-                  className="text-xs text-cc-muted hover:text-cc-error cursor-pointer"
+                  className="text-xs px-2 py-1.5 text-cc-muted hover:text-cc-error cursor-pointer"
                 >
                   Delete
                 </button>
@@ -497,7 +497,7 @@ export function CronManager({ onClose, embedded = false }: Props) {
         {onClose && (
           <button
             onClick={onClose}
-            className="w-6 h-6 flex items-center justify-center rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+            className="w-8 h-8 flex items-center justify-center rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
           >
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
               <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
@@ -505,7 +505,7 @@ export function CronManager({ onClose, embedded = false }: Props) {
           </button>
         )}
       </div>
-      <div className="flex-1 overflow-y-auto px-3 sm:px-5 py-3 sm:py-4 space-y-4">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-5 py-3 sm:py-4 pb-safe space-y-4">
         {errorBanner}
         {jobsList}
         {createSection}
@@ -630,7 +630,7 @@ function JobForm({
                 <button
                   key={preset.value}
                   onClick={() => update({ schedule: preset.value })}
-                  className={`px-2 py-1 text-[10px] font-medium rounded-md transition-colors cursor-pointer ${
+                  className={`px-2.5 py-2 text-xs font-medium rounded-md transition-colors cursor-pointer ${
                     form.schedule === preset.value
                       ? "bg-cc-primary/20 text-cc-primary border border-cc-primary/30"
                       : "bg-cc-hover text-cc-muted hover:text-cc-fg border border-transparent"

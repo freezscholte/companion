@@ -266,7 +266,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-3 py-1.5 text-[11px] font-medium transition-colors cursor-pointer capitalize ${
+            className={`px-3 py-2.5 min-h-[44px] text-[11px] font-medium transition-colors cursor-pointer capitalize ${
               activeTab === t
                 ? "text-cc-primary border-b-2 border-cc-primary -mb-[1px]"
                 : "text-cc-muted hover:text-cc-fg"
@@ -319,7 +319,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
                 <button
                   onClick={() => handlePullImage(effectiveImg)}
                   disabled={isPulling}
-                  className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${
+                  className={`text-xs px-2.5 py-1.5 min-h-[44px] rounded transition-colors ${
                     isPulling
                       ? "bg-cc-hover text-cc-muted cursor-not-allowed"
                       : "bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 cursor-pointer"
@@ -449,9 +449,9 @@ export function EnvManager({ onClose, embedded = false }: Props) {
             />
             <button
               onClick={() => setPorts(ports.filter((_, idx) => idx !== i))}
-              className="w-5 h-5 flex items-center justify-center rounded text-cc-muted hover:text-cc-error transition-colors cursor-pointer shrink-0"
+              className="w-8 h-8 flex items-center justify-center rounded text-cc-muted hover:text-cc-error transition-colors cursor-pointer shrink-0"
             >
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-2.5 h-2.5">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
                 <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
               </svg>
             </button>
@@ -459,7 +459,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
         ))}
         <button
           onClick={() => setPorts([...ports, 3000])}
-          className="text-[10px] text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
+          className="text-xs py-2 min-h-[44px] text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
         >
           + Add port
         </button>
@@ -522,7 +522,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
             {editingSlug === env.slug ? (
               <button
                 onClick={cancelEdit}
-                className="text-xs text-cc-muted hover:text-cc-fg cursor-pointer"
+                className="text-xs px-2 py-1.5 min-h-[44px] text-cc-muted hover:text-cc-fg cursor-pointer"
               >
                 Cancel
               </button>
@@ -530,13 +530,13 @@ export function EnvManager({ onClose, embedded = false }: Props) {
               <>
                 <button
                   onClick={() => startEdit(env)}
-                  className="text-xs text-cc-muted hover:text-cc-fg cursor-pointer"
+                  className="text-xs px-2 py-1.5 min-h-[44px] text-cc-muted hover:text-cc-fg cursor-pointer"
                 >
                   Edit
                 </button>
                 <button
                   onClick={() => handleDelete(env.slug)}
-                  className="text-xs text-cc-muted hover:text-cc-error cursor-pointer"
+                  className="text-xs px-2 py-1.5 min-h-[44px] text-cc-muted hover:text-cc-error cursor-pointer"
                 >
                   Delete
                 </button>
@@ -599,7 +599,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
   );
 
   const createForm = (
-    <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
+    <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card min-w-0">
       <div className="px-3 py-2.5 bg-cc-card border-b border-cc-border">
         <span className="text-sm font-medium text-cc-fg">New Environment</span>
       </div>
@@ -636,8 +636,8 @@ export function EnvManager({ onClose, embedded = false }: Props) {
 
   if (embedded) {
     return (
-      <div className="h-full bg-cc-bg overflow-y-auto">
-        <div className="max-w-5xl mx-auto px-4 sm:px-8 py-6 sm:py-10">
+      <div className="h-full bg-cc-bg overflow-y-auto overflow-x-hidden">
+        <div className="max-w-5xl mx-auto px-4 sm:px-8 py-6 sm:py-10 pb-safe">
           <div className="mb-6 flex items-center gap-3">
             <div className="flex-1">
               <h1 className="text-xl font-semibold text-cc-fg">Environments</h1>
@@ -649,11 +649,11 @@ export function EnvManager({ onClose, embedded = false }: Props) {
           </div>
           {errorBanner}
           <div className={`mt-4 grid gap-4 ${envs.length > 0 ? "xl:grid-cols-[1.45fr_1fr]" : ""}`}>
-            <section className="bg-cc-card border border-cc-border rounded-xl p-4 sm:p-5 space-y-3">
+            <section className="bg-cc-card border border-cc-border rounded-xl p-4 sm:p-5 space-y-3 min-w-0">
               <h2 className="text-sm font-semibold text-cc-fg">Profiles</h2>
               {environmentsList}
             </section>
-            <section className="bg-cc-card border border-cc-border rounded-xl p-4 sm:p-5 space-y-3 h-fit xl:sticky xl:top-4">
+            <section className="bg-cc-card border border-cc-border rounded-xl p-4 sm:p-5 space-y-3 min-w-0 h-fit xl:sticky xl:top-4">
               <h2 className="text-sm font-semibold text-cc-fg">Create</h2>
               {createForm}
             </section>
@@ -676,7 +676,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
         {onClose && (
           <button
             onClick={onClose}
-            className="w-6 h-6 flex items-center justify-center rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+            className="w-8 h-8 flex items-center justify-center rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
           >
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
               <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
@@ -684,7 +684,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
           </button>
         )}
       </div>
-      <div className="flex-1 overflow-y-auto px-3 sm:px-5 py-3 sm:py-4 space-y-4">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-5 py-3 sm:py-4 pb-safe space-y-4">
         {errorBanner}
         {environmentsList}
         {createForm}
@@ -728,7 +728,7 @@ function VarEditor({ rows, onChange }: { rows: VarRow[]; onChange: (rows: VarRow
             value={row.key}
             onChange={(e) => updateRow(i, "key", e.target.value)}
             placeholder="KEY"
-            className="flex-1 min-w-0 px-2 py-1 text-[11px] font-mono-code bg-cc-input-bg border border-cc-border rounded-md text-cc-fg placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/50"
+            className="flex-1 min-w-0 px-2.5 py-2 text-xs font-mono-code bg-cc-input-bg border border-cc-border rounded-md text-cc-fg placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/50"
           />
           <span className="text-[10px] text-cc-muted">=</span>
           <input
@@ -736,13 +736,13 @@ function VarEditor({ rows, onChange }: { rows: VarRow[]; onChange: (rows: VarRow
             value={row.value}
             onChange={(e) => updateRow(i, "value", e.target.value)}
             placeholder="value"
-            className="flex-1 min-w-0 px-2 py-1 text-[11px] font-mono-code bg-cc-input-bg border border-cc-border rounded-md text-cc-fg placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/50"
+            className="flex-1 min-w-0 px-2.5 py-2 text-xs font-mono-code bg-cc-input-bg border border-cc-border rounded-md text-cc-fg placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/50"
           />
           <button
             onClick={() => removeRow(i)}
-            className="w-5 h-5 flex items-center justify-center rounded text-cc-muted hover:text-cc-error transition-colors cursor-pointer shrink-0"
+            className="w-8 h-8 flex items-center justify-center rounded text-cc-muted hover:text-cc-error transition-colors cursor-pointer shrink-0"
           >
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-2.5 h-2.5">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
               <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
             </svg>
           </button>
@@ -750,7 +750,7 @@ function VarEditor({ rows, onChange }: { rows: VarRow[]; onChange: (rows: VarRow
       ))}
       <button
         onClick={addRow}
-        className="text-[10px] text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
+        className="text-xs py-2 min-h-[44px] text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
       >
         + Add variable
       </button>

@@ -152,8 +152,10 @@ beforeEach(() => {
 
 describe("Sidebar", () => {
   it("renders 'New Session' button", () => {
+    // Desktop header + mobile FAB both have title="New Session"
     render(<Sidebar />);
-    expect(screen.getByTitle("New Session")).toBeInTheDocument();
+    const buttons = screen.getAllByTitle("New Session");
+    expect(buttons.length).toBeGreaterThanOrEqual(1);
   });
 
   it("renders 'No sessions yet.' when no sessions exist", () => {
@@ -291,8 +293,10 @@ describe("Sidebar", () => {
   });
 
   it("New Session button calls newSession", () => {
+    // There are two New Session buttons: desktop header + mobile FAB
     render(<Sidebar />);
-    fireEvent.click(screen.getByTitle("New Session"));
+    const buttons = screen.getAllByTitle("New Session");
+    fireEvent.click(buttons[0]);
 
     expect(mockState.newSession).toHaveBeenCalled();
   });

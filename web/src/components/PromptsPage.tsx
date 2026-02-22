@@ -104,7 +104,7 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
 
   return (
     <div className={`${embedded ? "h-full" : "h-[100dvh]"} bg-cc-bg text-cc-fg font-sans-ui antialiased overflow-y-auto`}>
-      <div className="max-w-5xl mx-auto px-4 sm:px-8 py-6 sm:py-10">
+      <div className="max-w-5xl mx-auto px-4 sm:px-8 py-6 sm:py-10 pb-safe">
         <div className="flex items-start justify-between gap-3 mb-6">
           <div>
             <h1 className="text-xl font-semibold text-cc-fg">Saved Prompts</h1>
@@ -124,7 +124,7 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
                   navigateHome();
                 }
               }}
-              className="px-3 py-1.5 rounded-lg text-sm text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+              className="px-3 py-2.5 min-h-[44px] rounded-lg text-sm text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
             >
               Back
             </button>
@@ -218,13 +218,13 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
                           setEditName(prompt.name);
                           setEditContent(prompt.content);
                         }}
-                        className="ml-auto text-xs text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
+                        className="ml-auto text-xs px-2 py-1.5 text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => void handleDelete(prompt.id)}
-                        className="text-xs text-cc-muted hover:text-cc-error transition-colors cursor-pointer"
+                        className="text-xs px-2 py-1.5 text-cc-muted hover:text-cc-error transition-colors cursor-pointer"
                       >
                         Delete
                       </button>
@@ -250,14 +250,14 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
                               setEditName("");
                               setEditContent("");
                             }}
-                            className="px-2.5 py-1.5 text-xs rounded-md border border-cc-border text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+                            className="px-3 py-2.5 text-xs rounded-md border border-cc-border text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
                           >
                             Cancel
                           </button>
                           <button
                             onClick={() => void handleSaveEdit()}
                             disabled={!editName.trim() || !editContent.trim()}
-                            className={`px-2.5 py-1.5 text-xs rounded-md transition-colors ${
+                            className={`px-3 py-2.5 text-xs rounded-md transition-colors ${
                               editName.trim() && editContent.trim()
                                 ? "bg-cc-primary hover:bg-cc-primary-hover text-white cursor-pointer"
                                 : "bg-cc-hover text-cc-muted cursor-not-allowed"

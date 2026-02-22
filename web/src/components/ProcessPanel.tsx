@@ -105,7 +105,7 @@ function ProcessRow({
             type="button"
             onClick={onKill}
             disabled={killing}
-            className="shrink-0 text-[11px] text-cc-error hover:text-red-500 disabled:opacity-50 transition-colors cursor-pointer px-1.5 py-0.5 rounded hover:bg-cc-hover"
+            className="shrink-0 text-[11px] text-cc-error hover:text-red-500 disabled:opacity-50 transition-colors cursor-pointer px-2.5 py-1.5 min-h-[44px] rounded hover:bg-cc-hover"
             title="Kill process"
             aria-label={`Kill process ${process.taskId}`}
           >
@@ -176,7 +176,7 @@ function SystemProcessRow({
           type="button"
           onClick={onKill}
           disabled={killing}
-          className="shrink-0 text-[11px] text-cc-error hover:text-red-500 disabled:opacity-50 transition-colors cursor-pointer px-1.5 py-0.5 rounded hover:bg-cc-hover"
+          className="shrink-0 text-[11px] text-cc-error hover:text-red-500 disabled:opacity-50 transition-colors cursor-pointer px-2.5 py-1.5 min-h-[44px] rounded hover:bg-cc-hover"
           title="Kill process"
           aria-label={`Kill system process ${proc.pid}`}
         >
@@ -323,7 +323,7 @@ export function ProcessPanel({ sessionId }: { sessionId: string }) {
           type="button"
           onClick={handleRefresh}
           disabled={refreshing}
-          className="mt-3 text-[11px] text-cc-muted hover:text-cc-fg disabled:opacity-50 transition-colors cursor-pointer px-3 py-1 rounded border border-cc-border hover:bg-cc-hover"
+          className="mt-3 text-[11px] text-cc-muted hover:text-cc-fg disabled:opacity-50 transition-colors cursor-pointer px-3 py-2 rounded border border-cc-border hover:bg-cc-hover"
           aria-label="Scan for dev servers"
         >
           {refreshing ? "Scanning..." : "Scan for dev servers"}
@@ -345,7 +345,7 @@ export function ProcessPanel({ sessionId }: { sessionId: string }) {
                 <button
                   type="button"
                   onClick={handleKillAll}
-                  className="text-[11px] text-cc-error hover:text-red-500 transition-colors cursor-pointer"
+                  className="text-[11px] px-2.5 py-1.5 text-cc-error hover:text-red-500 transition-colors cursor-pointer"
                   aria-label="Kill all running processes"
                 >
                   Kill All
@@ -390,7 +390,7 @@ export function ProcessPanel({ sessionId }: { sessionId: string }) {
                   type="button"
                   onClick={handleRefresh}
                   disabled={refreshing}
-                  className="text-[11px] text-cc-muted hover:text-cc-fg disabled:opacity-50 transition-colors cursor-pointer"
+                  className="text-[11px] px-2 py-1.5 text-cc-muted hover:text-cc-fg disabled:opacity-50 transition-colors cursor-pointer"
                   aria-label="Refresh system processes"
                 >
                   {refreshing ? "..." : "Refresh"}
