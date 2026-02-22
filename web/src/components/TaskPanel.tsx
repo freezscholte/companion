@@ -964,7 +964,7 @@ function TaskPanelConfigView({ isCodex }: { isCodex: boolean }) {
                 data-testid={`toggle-${sectionId}`}
               >
                 <span
-                  className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow transition-transform ${
+                  className={`absolute top-[2px] left-0 w-[14px] h-[14px] rounded-full bg-white shadow transition-transform ${
                     enabled ? "translate-x-[16px]" : "translate-x-[2px]"
                   }`}
                 />

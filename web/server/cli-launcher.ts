@@ -557,7 +557,7 @@ export class CliLauncher {
         const src = join(legacyHome, name);
         const dest = join(codexHome, name);
         if (!existsSync(dest) && existsSync(src)) {
-          cpSync(src, dest, { recursive: true });
+          cpSync(src, dest, { recursive: true, dereference: true });
         }
       } catch (e) {
         console.warn(`[cli-launcher] Failed to bootstrap ${name}/ from legacy home:`, e);
