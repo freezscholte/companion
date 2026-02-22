@@ -2,7 +2,7 @@ import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { useStore } from "../store.js";
 import { parseHash } from "../utils/routing.js";
 
-type WorkspaceTab = "chat" | "diff" | "terminal" | "processes" | "editor";
+type WorkspaceTab = "chat" | "diff" | "terminal" | "processes" | "files" | "editor";
 
 export function TopBar() {
   const hash = useSyncExternalStore(
@@ -79,7 +79,7 @@ export function TopBar() {
   const showWorkspaceControls = !!(currentSessionId && isSessionView);
   const showContextToggle = route.page === "session" && !!currentSessionId;
   const workspaceTabs = useMemo(() => {
-    const tabs: WorkspaceTab[] = ["chat", "diff", "terminal", "processes"];
+    const tabs: WorkspaceTab[] = ["chat", "diff", "terminal", "processes", "files"];
     if (editorTabEnabled) tabs.push("editor");
     return tabs;
   }, [editorTabEnabled]);
@@ -91,6 +91,12 @@ export function TopBar() {
         openQuickTerminal({ ...defaultTerminalOpts, reuseIfExists: true });
       }
       setActiveTab("terminal");
+      return;
+    }
+
+    if (tab === "files") {
+      if (!cwd) return;
+      setActiveTab("files");
       return;
     }
 
@@ -213,6 +219,21 @@ export function TopBar() {
                     {runningProcessCount}
                   </span>
                 )}
+              </button>
+              <button
+                onClick={() => activateWorkspaceTab("files")}
+                disabled={!cwd}
+                className={`h-full px-3 text-[12px] font-medium transition-colors flex items-center border-b-[1.5px] ${
+                  !cwd
+                    ? "text-cc-muted/50 border-transparent cursor-not-allowed"
+                    : activeTab === "files"
+                      ? "text-cc-fg border-cc-primary cursor-pointer"
+                      : "text-cc-muted hover:text-cc-fg border-transparent cursor-pointer"
+                }`}
+                title={!cwd ? "Files unavailable while session is reconnecting" : "Project files"}
+                aria-label="Files tab"
+              >
+                Files
               </button>
               {editorTabEnabled && (
                 <button
