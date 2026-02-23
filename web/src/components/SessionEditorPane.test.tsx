@@ -63,9 +63,17 @@ async function clickFile(name: string) {
   fireEvent.click(btns[0]);
 }
 
+// Helper: expand a collapsed folder by clicking its toggle button.
+// Folders start collapsed by default.
+async function expandFolder(name: string) {
+  const toggleBtns = await screen.findAllByLabelText(`Toggle ${name}`);
+  fireEvent.click(toggleBtns[0]);
+}
+
 describe("SessionEditorPane", () => {
   it("loads tree and reads file when selected", async () => {
-    // Tree loads on mount, file content loads when a file is clicked
+    // Tree loads on mount, file content loads when a file is clicked.
+    // Folders start collapsed, so we expand "src" first to reveal "a.ts".
     getFileTreeMock.mockResolvedValue({
       path: "/repo",
       tree: [
@@ -78,7 +86,8 @@ describe("SessionEditorPane", () => {
 
     await waitFor(() => expect(getFileTreeMock).toHaveBeenCalledWith("/repo"));
 
-    // Click the file to select it (use first match — desktop and mobile both render)
+    // Expand the src folder (collapsed by default), then click the file
+    await expandFolder("src");
     await clickFile("a.ts");
 
     await waitFor(() => expect(readFileMock).toHaveBeenCalledWith("/repo/src/a.ts"));
@@ -249,5 +258,190 @@ describe("SessionEditorPane", () => {
     // Back button should exist (visible on mobile via sm:hidden)
     const backBtns = screen.getAllByLabelText("Back to file tree");
     expect(backBtns.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders folders collapsed by default", async () => {
+    // All folders should start collapsed — children are not visible until expanded
+    getFileTreeMock.mockResolvedValue({
+      path: "/repo",
+      tree: [
+        {
+          name: "src", path: "/repo/src", type: "directory",
+          children: [{ name: "hidden.ts", path: "/repo/src/hidden.ts", type: "file" }],
+        },
+      ],
+    });
+    render(<SessionEditorPane sessionId="s1" />);
+
+    // Folder name should be visible
+    const folders = await screen.findAllByText("src");
+    expect(folders.length).toBeGreaterThanOrEqual(1);
+    // But the child file should NOT be visible (collapsed)
+    expect(screen.queryByText("hidden.ts")).not.toBeInTheDocument();
+
+    // After expanding the folder, the child should appear
+    await expandFolder("src");
+    const files = await screen.findAllByText("hidden.ts");
+    expect(files.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("has a search button that opens fuzzy file search", async () => {
+    // The search icon button should toggle the search input
+    getFileTreeMock.mockResolvedValue({
+      path: "/repo",
+      tree: [
+        { name: "app.tsx", path: "/repo/app.tsx", type: "file" },
+        {
+          name: "src", path: "/repo/src", type: "directory",
+          children: [
+            { name: "store.ts", path: "/repo/src/store.ts", type: "file" },
+            { name: "api.ts", path: "/repo/src/api.ts", type: "file" },
+          ],
+        },
+      ],
+    });
+    render(<SessionEditorPane sessionId="s1" />);
+
+    await waitFor(() => expect(getFileTreeMock).toHaveBeenCalled());
+
+    // Search button should exist
+    const searchBtns = screen.getAllByLabelText("Search files");
+    expect(searchBtns.length).toBeGreaterThanOrEqual(1);
+
+    // Click search button to open search
+    fireEvent.click(searchBtns[0]);
+
+    // Search input should now be visible
+    const inputs = screen.getAllByPlaceholderText("Search files...");
+    expect(inputs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("fuzzy search filters and selects files from nested directories", async () => {
+    // Search should flatten the tree and allow selecting deeply nested files
+    // without needing to expand folders manually
+    getFileTreeMock.mockResolvedValue({
+      path: "/repo",
+      tree: [
+        { name: "index.ts", path: "/repo/index.ts", type: "file" },
+        {
+          name: "src", path: "/repo/src", type: "directory",
+          children: [
+            { name: "store.ts", path: "/repo/src/store.ts", type: "file" },
+            { name: "api.ts", path: "/repo/src/api.ts", type: "file" },
+          ],
+        },
+      ],
+    });
+    readFileMock.mockResolvedValue({ path: "/repo/src/store.ts", content: "export const store = {};\n" });
+
+    render(<SessionEditorPane sessionId="s1" />);
+    await waitFor(() => expect(getFileTreeMock).toHaveBeenCalled());
+
+    // Open search
+    const searchBtns = screen.getAllByLabelText("Search files");
+    fireEvent.click(searchBtns[0]);
+
+    // Type a query that matches "store.ts"
+    const inputs = screen.getAllByPlaceholderText("Search files...");
+    fireEvent.change(inputs[0], { target: { value: "store" } });
+
+    // "src/store.ts" should appear in results
+    const results = await screen.findAllByTitle("src/store.ts");
+    expect(results.length).toBeGreaterThanOrEqual(1);
+
+    // Click the result to select the file
+    fireEvent.click(results[0]);
+
+    // File should be loaded and search should close
+    await waitFor(() => expect(readFileMock).toHaveBeenCalledWith("/repo/src/store.ts"));
+    // Search input should no longer be visible
+    expect(screen.queryByPlaceholderText("Search files...")).not.toBeInTheDocument();
+  });
+
+  it("closes search on Escape key", async () => {
+    // Pressing Escape in the search input should close search mode
+    getFileTreeMock.mockResolvedValue({
+      path: "/repo",
+      tree: [{ name: "a.ts", path: "/repo/a.ts", type: "file" }],
+    });
+    render(<SessionEditorPane sessionId="s1" />);
+    await waitFor(() => expect(getFileTreeMock).toHaveBeenCalled());
+
+    // Open search
+    const searchBtns = screen.getAllByLabelText("Search files");
+    fireEvent.click(searchBtns[0]);
+
+    const inputs = screen.getAllByPlaceholderText("Search files...");
+    expect(inputs.length).toBeGreaterThanOrEqual(1);
+
+    // Press Escape to close
+    fireEvent.keyDown(inputs[0], { key: "Escape" });
+
+    // Search should be closed
+    expect(screen.queryByPlaceholderText("Search files...")).not.toBeInTheDocument();
+  });
+
+  it("navigates search results with arrow keys and Enter", async () => {
+    // Arrow keys should move selection, Enter should select the highlighted result
+    getFileTreeMock.mockResolvedValue({
+      path: "/repo",
+      tree: [
+        { name: "alpha.ts", path: "/repo/alpha.ts", type: "file" },
+        { name: "beta.ts", path: "/repo/beta.ts", type: "file" },
+      ],
+    });
+    readFileMock.mockResolvedValue({ path: "/repo/beta.ts", content: "beta\n" });
+
+    render(<SessionEditorPane sessionId="s1" />);
+    await waitFor(() => expect(getFileTreeMock).toHaveBeenCalled());
+
+    // Open search
+    const searchBtns = screen.getAllByLabelText("Search files");
+    fireEvent.click(searchBtns[0]);
+
+    const inputs = screen.getAllByPlaceholderText("Search files...");
+    // Arrow down to move to second result, then Enter to select
+    fireEvent.keyDown(inputs[0], { key: "ArrowDown" });
+    fireEvent.keyDown(inputs[0], { key: "Enter" });
+
+    // The second file should be selected (beta.ts)
+    await waitFor(() => expect(readFileMock).toHaveBeenCalledWith("/repo/beta.ts"));
+  });
+
+  it("supports glob patterns like *.ts in search", async () => {
+    // Glob patterns (containing * or ?) should filter by extension/pattern
+    // rather than doing fuzzy matching. "*.ts" should match all .ts files
+    // regardless of directory depth.
+    getFileTreeMock.mockResolvedValue({
+      path: "/repo",
+      tree: [
+        { name: "index.js", path: "/repo/index.js", type: "file" },
+        { name: "app.ts", path: "/repo/app.ts", type: "file" },
+        {
+          name: "src", path: "/repo/src", type: "directory",
+          children: [
+            { name: "store.ts", path: "/repo/src/store.ts", type: "file" },
+            { name: "styles.css", path: "/repo/src/styles.css", type: "file" },
+          ],
+        },
+      ],
+    });
+    render(<SessionEditorPane sessionId="s1" />);
+    await waitFor(() => expect(getFileTreeMock).toHaveBeenCalled());
+
+    // Open search and type a glob pattern
+    const searchBtns = screen.getAllByLabelText("Search files");
+    fireEvent.click(searchBtns[0]);
+
+    const inputs = screen.getAllByPlaceholderText("Search files...");
+    fireEvent.change(inputs[0], { target: { value: "*.ts" } });
+
+    // Should show both .ts files but not .js or .css
+    await waitFor(() => {
+      expect(screen.getAllByTitle("app.ts").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByTitle("src/store.ts").length).toBeGreaterThanOrEqual(1);
+    });
+    expect(screen.queryByTitle("index.js")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("src/styles.css")).not.toBeInTheDocument();
   });
 });

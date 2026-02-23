@@ -14,6 +14,7 @@ import { java } from "@codemirror/lang-java";
 import { sql } from "@codemirror/lang-sql";
 import { xml } from "@codemirror/lang-xml";
 import { yaml } from "@codemirror/lang-yaml";
+import { Fzf } from "fzf";
 import { api, type TreeNode } from "../api.js";
 import { useStore } from "../store.js";
 
@@ -99,6 +100,19 @@ function relPath(cwd: string, path: string): string {
   return path;
 }
 
+/** Flatten a tree of nodes into a list of file entries with relative paths. */
+function flattenTree(nodes: TreeNode[], cwd: string): { path: string; relPath: string }[] {
+  const results: { path: string; relPath: string }[] = [];
+  function walk(items: TreeNode[]) {
+    for (const node of items) {
+      if (node.type === "file") results.push({ path: node.path, relPath: relPath(cwd, node.path) });
+      if (node.children) walk(node.children);
+    }
+  }
+  walk(nodes);
+  return results;
+}
+
 interface TreeEntryProps {
   node: TreeNode;
   depth: number;
@@ -108,7 +122,7 @@ interface TreeEntryProps {
 }
 
 function TreeEntry({ node, depth, cwd, selectedPath, onSelect }: TreeEntryProps) {
-  const [open, setOpen] = useState(depth < 1);
+  const [open, setOpen] = useState(false);
   if (node.type === "directory") {
     return (
       <div>
@@ -200,6 +214,77 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
   const refreshTree = useCallback(() => {
     setRefreshKey((k) => k + 1);
   }, []);
+
+  // ── Fuzzy file search state ──
+  const [searchActive, setSearchActive] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchSelectedIndex, setSearchSelectedIndex] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const flatFiles = useMemo(() => (cwd ? flattenTree(tree, cwd) : []), [tree, cwd]);
+
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim();
+    if (!q) return flatFiles.slice(0, 50);
+
+    // Glob filter: queries containing * or ? are treated as glob patterns.
+    // Patterns without "/" match against filenames only (e.g. "*.ts" matches all .ts files).
+    // Patterns with "/" match against the full relative path (e.g. "src/*.ts").
+    if (q.includes("*") || q.includes("?")) {
+      const matchFullPath = q.includes("/");
+      const escaped = q.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+      const pattern = escaped.replace(/\*\*/g, "##GLOBSTAR##").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]").replace(/##GLOBSTAR##/g, ".*");
+      try {
+        const re = new RegExp(`^${pattern}$`, "i");
+        return flatFiles.filter((f) => {
+          const target = matchFullPath ? f.relPath : f.relPath.split("/").pop()!;
+          return re.test(target);
+        }).slice(0, 50);
+      } catch {
+        // If the glob produces an invalid regex, fall through to fuzzy
+      }
+    }
+
+    const fzf = new Fzf(flatFiles, { selector: (item) => item.relPath, limit: 50 });
+    return fzf.find(q).map((r) => r.item);
+  }, [flatFiles, searchQuery]);
+
+  // Reset selection index when results change
+  useEffect(() => {
+    setSearchSelectedIndex(0);
+  }, [searchResults]);
+
+  const openSearch = useCallback(() => {
+    setSearchActive(true);
+    setSearchQuery("");
+    setSearchSelectedIndex(0);
+  }, []);
+
+  const closeSearch = useCallback(() => {
+    setSearchActive(false);
+    setSearchQuery("");
+    setSearchSelectedIndex(0);
+  }, []);
+
+  // Focus the search input when search opens
+  useEffect(() => {
+    if (searchActive) {
+      // Defer focus to next frame so the input is mounted
+      requestAnimationFrame(() => searchInputRef.current?.focus());
+    }
+  }, [searchActive]);
+
+  // Cmd/Ctrl+P to toggle search
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "p") return;
+      event.preventDefault();
+      if (searchActive) closeSearch();
+      else openSearch();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [searchActive, openSearch, closeSearch]);
 
   // Load file tree when cwd changes, when Claude edits files, or on manual refresh
   useEffect(() => {
@@ -332,6 +417,11 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
     setSelectedPath(nextPath);
   }, [dirty]);
 
+  const selectSearchResult = useCallback((path: string) => {
+    handleSelectFile(path);
+    closeSearch();
+  }, [handleSelectFile, closeSearch]);
+
   if (!cwd) {
     return (
       <div className="h-full flex items-center justify-center p-4 text-sm text-cc-muted">
@@ -342,45 +432,118 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
 
   const isImage = selectedPath ? isImageFile(selectedPath) : false;
 
+  // ── Search result keyboard handler ──
+  const handleSearchKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeSearch();
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setSearchSelectedIndex((i) => Math.min(i + 1, searchResults.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSearchSelectedIndex((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const item = searchResults[searchSelectedIndex];
+      if (item) selectSearchResult(item.path);
+    }
+  }, [closeSearch, searchResults, searchSelectedIndex, selectSearchResult]);
+
   // ── Tree panel (reused in both desktop sidebar and mobile master view) ──
   const treePanel = (
     <div className="flex-1 min-h-0 flex flex-col">
       <div className="shrink-0 px-3 py-2 border-b border-cc-border flex items-center justify-between">
         <span className="text-xs text-cc-muted font-medium">Files</span>
-        <button
-          type="button"
-          onClick={refreshTree}
-          disabled={loadingTree}
-          className="flex items-center justify-center w-6 h-6 rounded text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-          aria-label="Refresh file tree"
-          title="Refresh file tree"
-        >
-          <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 ${loadingTree ? "animate-spin" : ""}`}>
-            <path d="M13.65 2.35a1 1 0 0 0-1.3 0L11 3.7A5.99 5.99 0 0 0 2 8a1 1 0 1 0 2 0 4 4 0 0 1 6.29-3.29L8.65 6.35a1 1 0 0 0 .7 1.7H13a1 1 0 0 0 1-1V3.4a1 1 0 0 0-.35-.7z M14 8a1 1 0 1 0-2 0 4 4 0 0 1-6.29 3.29l1.64-1.64a1 1 0 0 0-.7-1.7H3.05a1 1 0 0 0-1 1v3.65a1 1 0 0 0 1.7.7L5 11.7A5.99 5.99 0 0 0 14 8z" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={searchActive ? closeSearch : openSearch}
+            className={`flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer ${
+              searchActive
+                ? "text-cc-fg bg-cc-hover"
+                : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+            }`}
+            aria-label="Search files"
+            title="Search files (Ctrl+P)"
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+              <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85zm-5.242.156a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={refreshTree}
+            disabled={loadingTree}
+            className="flex items-center justify-center w-6 h-6 rounded text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            aria-label="Refresh file tree"
+            title="Refresh file tree"
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 ${loadingTree ? "animate-spin" : ""}`}>
+              <path d="M13.65 2.35a1 1 0 0 0-1.3 0L11 3.7A5.99 5.99 0 0 0 2 8a1 1 0 1 0 2 0 4 4 0 0 1 6.29-3.29L8.65 6.35a1 1 0 0 0 .7 1.7H13a1 1 0 0 0 1-1V3.4a1 1 0 0 0-.35-.7z M14 8a1 1 0 1 0-2 0 4 4 0 0 1-6.29 3.29l1.64-1.64a1 1 0 0 0-.7-1.7H3.05a1 1 0 0 0-1 1v3.65a1 1 0 0 0 1.7.7L5 11.7A5.99 5.99 0 0 0 14 8z" />
+            </svg>
+          </button>
+        </div>
       </div>
-      <div className="flex-1 min-h-0 overflow-auto p-1.5">
-        {loadingTree && <div className="px-2 py-2 text-xs text-cc-muted">Loading files...</div>}
-        {!loadingTree && tree.length === 0 && !error && (
-          <div className="px-2 py-2 text-xs text-cc-muted">No editable files found.</div>
-        )}
-        {!loadingTree && error && !selectedPath && (
-          <div className="m-2 px-3 py-2 rounded-lg bg-cc-error/10 border border-cc-error/30 text-xs text-cc-error">
-            {error}
+      {searchActive && (
+        <div className="shrink-0 border-b border-cc-border">
+          <div className="px-2 py-1.5">
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              placeholder="Search files..."
+              aria-label="Search files"
+              className="w-full px-2 py-1 text-xs rounded bg-cc-bg border border-cc-border text-cc-fg placeholder:text-cc-muted focus:outline-none focus:border-cc-primary"
+            />
           </div>
-        )}
-        {!loadingTree && tree.map((node) => (
-          <TreeEntry
-            key={node.path}
-            node={node}
-            depth={0}
-            cwd={cwd}
-            selectedPath={selectedPath}
-            onSelect={handleSelectFile}
-          />
-        ))}
-      </div>
+          <div className="max-h-[300px] overflow-auto p-1">
+            {searchResults.length === 0 && searchQuery.trim() && (
+              <div className="px-2 py-2 text-xs text-cc-muted">No files found.</div>
+            )}
+            {searchResults.map((item, i) => (
+              <button
+                key={item.path}
+                type="button"
+                onClick={() => selectSearchResult(item.path)}
+                className={`w-full text-left px-2 py-1.5 text-xs rounded truncate cursor-pointer ${
+                  i === searchSelectedIndex
+                    ? "bg-cc-active text-cc-fg"
+                    : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+                }`}
+                title={item.relPath}
+              >
+                {item.relPath}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {!searchActive && (
+        <div className="flex-1 min-h-0 overflow-auto p-1.5">
+          {loadingTree && <div className="px-2 py-2 text-xs text-cc-muted">Loading files...</div>}
+          {!loadingTree && tree.length === 0 && !error && (
+            <div className="px-2 py-2 text-xs text-cc-muted">No editable files found.</div>
+          )}
+          {!loadingTree && error && !selectedPath && (
+            <div className="m-2 px-3 py-2 rounded-lg bg-cc-error/10 border border-cc-error/30 text-xs text-cc-error">
+              {error}
+            </div>
+          )}
+          {!loadingTree && tree.map((node) => (
+            <TreeEntry
+              key={node.path}
+              node={node}
+              depth={0}
+              cwd={cwd}
+              selectedPath={selectedPath}
+              onSelect={handleSelectFile}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 
