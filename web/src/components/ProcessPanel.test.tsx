@@ -68,6 +68,23 @@ vi.mock("../store.js", () => ({
 
 import { ProcessPanel } from "./ProcessPanel.js";
 
+async function expandSystemGroup(label?: string) {
+  const button = label
+    ? await screen.findByRole("button", { name: `Toggle process group ${label}` })
+    : await screen.findByRole("button", { name: /Toggle process group/ });
+  // Wait for default-collapse effect to settle before toggling.
+  await waitFor(() => {
+    expect(button).toHaveAttribute("aria-expanded");
+  });
+  if (button.getAttribute("aria-expanded") === "false") {
+    fireEvent.click(button);
+    await waitFor(() => {
+      expect(button).toHaveAttribute("aria-expanded", "true");
+    });
+  }
+  return button;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   resetStore();
@@ -238,6 +255,8 @@ describe("ProcessPanel system processes", () => {
     mockGetSystemProcesses.mockResolvedValue({ ok: true, processes: sysProcs });
     render(<ProcessPanel sessionId="s1" />);
 
+    await expandSystemGroup();
+
     await waitFor(() => {
       expect(screen.getByText("bun")).toBeInTheDocument();
       expect(screen.getByText("localhost:3000")).toBeInTheDocument();
@@ -258,6 +277,8 @@ describe("ProcessPanel system processes", () => {
       ],
     });
     render(<ProcessPanel sessionId="s1" />);
+
+    await expandSystemGroup();
 
     await waitFor(() => {
       expect(screen.getByText("Vite dev server")).toBeInTheDocument();
@@ -295,6 +316,18 @@ describe("ProcessPanel system processes", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Toggle process group app" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Toggle process group worker" })).toBeInTheDocument();
+      // Group-level summary info should be visible even while collapsed.
+      expect(screen.getAllByText("1 running").length).toBeGreaterThan(0);
+      expect(screen.getByText("Current repo")).toBeInTheDocument();
+    });
+
+    // Current repo should start expanded; other folders should start collapsed.
+    expect(screen.getByRole("button", { name: "Toggle process group app" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Toggle process group worker" })).toHaveAttribute("aria-expanded", "false");
+
+    await expandSystemGroup("worker");
+
+    await waitFor(() => {
       expect(screen.getByText("Current repo")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Open http://localhost:3000" })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Open http://localhost:3001" })).toBeInTheDocument();
@@ -318,14 +351,21 @@ describe("ProcessPanel system processes", () => {
     });
     render(<ProcessPanel sessionId="s1" />);
 
+    const groupButton = await screen.findByRole("button", { name: "Toggle process group app" });
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Toggle process group app" })).toBeInTheDocument();
-      expect(screen.getByText("localhost:3002")).toBeInTheDocument();
+      expect(groupButton).toHaveAttribute("aria-expanded", "false");
+    });
+    expect(screen.queryByRole("button", { name: "Kill system process 303" })).not.toBeInTheDocument();
+
+    fireEvent.click(groupButton);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Kill system process 303" })).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Toggle process group app" }));
+    fireEvent.click(groupButton);
 
-    expect(screen.queryByText("localhost:3002")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Kill system process 303" })).not.toBeInTheDocument();
   });
 
   it("shows 'Dev Servers' section header when system processes exist", async () => {
@@ -349,6 +389,8 @@ describe("ProcessPanel system processes", () => {
     });
     render(<ProcessPanel sessionId="s1" />);
 
+    await expandSystemGroup();
+
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Kill system process 9999" })).toBeInTheDocument();
     });
@@ -361,6 +403,8 @@ describe("ProcessPanel system processes", () => {
       processes: [makeSystemProcess({ pid: 7777 })],
     });
     render(<ProcessPanel sessionId="s1" />);
+
+    await expandSystemGroup();
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Kill system process 7777" })).toBeInTheDocument();
@@ -387,6 +431,7 @@ describe("ProcessPanel system processes", () => {
     expect(screen.getByText("Start dev server")).toBeInTheDocument();
 
     // System process (wait for async fetch)
+    await expandSystemGroup();
     await waitFor(() => {
       expect(screen.getByText("node")).toBeInTheDocument();
     });
@@ -403,6 +448,8 @@ describe("ProcessPanel system processes", () => {
       processes: [makeSystemProcess({ fullCommand: "node ./server.js --port 3000 --verbose" })],
     });
     render(<ProcessPanel sessionId="s1" />);
+
+    await expandSystemGroup();
 
     await waitFor(() => {
       expect(screen.getByText("server.js")).toBeInTheDocument();

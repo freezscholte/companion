@@ -117,6 +117,21 @@ interface SystemProcessGroup {
   processes: SystemProcess[];
 }
 
+function AccordionChevron({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      className={`w-3 h-3 text-cc-muted shrink-0 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
+      aria-hidden="true"
+    >
+      <path d="M7 4l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function groupSystemProcesses(systemProcesses: SystemProcess[], currentRepoPath?: string): SystemProcessGroup[] {
   const groups = new Map<string, SystemProcessGroup>();
 
@@ -385,6 +400,7 @@ export function ProcessPanel({ sessionId }: { sessionId: string }) {
   const [systemProcesses, setSystemProcesses] = useState<SystemProcess[]>([]);
   const [killingPids, setKillingPids] = useState<Set<number>>(new Set());
   const [collapsedSystemGroups, setCollapsedSystemGroups] = useState<Set<string>>(new Set());
+  const userToggledSystemGroupsRef = useRef<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
   const cancelledRef = useRef(false);
 
@@ -392,6 +408,44 @@ export function ProcessPanel({ sessionId }: { sessionId: string }) {
   const completedProcesses = processes.filter((p) => p.status !== "running");
   const currentRepoPath = session?.repo_root || session?.cwd;
   const systemGroups = groupSystemProcesses(systemProcesses, currentRepoPath);
+
+  // Default folder groups: expand current repo, collapse others.
+  // Re-apply for untouched groups so they self-correct if session repo metadata
+  // arrives after the first process scan.
+  useEffect(() => {
+    setCollapsedSystemGroups((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      const currentKeys = new Set(systemGroups.map((g) => g.key));
+
+      for (const group of systemGroups) {
+        if (userToggledSystemGroupsRef.current.has(group.key)) continue;
+
+        if (group.isCurrentRepo) {
+          if (next.delete(group.key)) changed = true;
+        } else {
+          if (!next.has(group.key)) {
+            next.add(group.key);
+            changed = true;
+          }
+        }
+      }
+
+      for (const key of [...next]) {
+        if (!currentKeys.has(key)) {
+          next.delete(key);
+          changed = true;
+        }
+      }
+      for (const key of [...userToggledSystemGroupsRef.current]) {
+        if (!currentKeys.has(key)) {
+          userToggledSystemGroupsRef.current.delete(key);
+        }
+      }
+
+      return changed ? next : prev;
+    });
+  }, [systemGroups]);
 
   const fetchSystemProcesses = useCallback(async () => {
     try {
@@ -486,6 +540,7 @@ export function ProcessPanel({ sessionId }: { sessionId: string }) {
   );
 
   const toggleSystemGroup = useCallback((groupKey: string) => {
+    userToggledSystemGroupsRef.current.add(groupKey);
     setCollapsedSystemGroups((prev) => {
       const next = new Set(prev);
       if (next.has(groupKey)) next.delete(groupKey);
@@ -588,26 +643,36 @@ export function ProcessPanel({ sessionId }: { sessionId: string }) {
             />
             {systemGroups.map((group) => {
               const isCollapsed = collapsedSystemGroups.has(group.key);
+              const uniquePorts = [...new Set(group.processes.flatMap((proc) => proc.ports))].sort((a, b) => a - b);
               return (
                 <div key={group.key}>
-                  <div className="px-4 py-2 border-b border-cc-border/70 bg-cc-hover/20">
+                  <div className="px-4 py-2.5 border-b border-cc-border bg-cc-hover/25">
                     <button
                       type="button"
                       onClick={() => toggleSystemGroup(group.key)}
-                      className="w-full flex items-start justify-between gap-3 text-left cursor-pointer"
+                      className="w-full flex items-start justify-between gap-3 text-left cursor-pointer rounded px-2 py-1.5 hover:bg-cc-hover/60 transition-colors"
                       aria-expanded={!isCollapsed}
                       aria-label={`Toggle process group ${group.label}`}
                     >
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[11px] text-cc-fg font-medium">
-                            {isCollapsed ? "▸" : "▾"} {group.label}
+                          <AccordionChevron expanded={!isCollapsed} />
+                          <span className="text-[9px] rounded px-1 py-0.5 border border-cc-border text-cc-muted uppercase tracking-wide">
+                            Folder
                           </span>
-                          <span className="text-[9px] rounded px-1 py-0.5 bg-cc-hover text-cc-muted">
-                            {group.processes.length} proc{group.processes.length === 1 ? "" : "s"}
+                          <span className="text-[12px] text-cc-fg font-medium">
+                            {group.label}
                           </span>
+                          <span className="text-[9px] rounded px-1.5 py-0.5 bg-cc-hover text-cc-fg/90">
+                            {group.processes.length} running
+                          </span>
+                          {uniquePorts.length > 0 && (
+                            <span className="text-[9px] rounded px-1.5 py-0.5 bg-cc-hover text-cc-muted">
+                              {uniquePorts.length} port{uniquePorts.length === 1 ? "" : "s"}
+                            </span>
+                          )}
                           {group.isCurrentRepo && (
-                            <span className="text-[9px] rounded px-1 py-0.5 bg-cc-primary/20 text-cc-primary">
+                            <span className="text-[9px] rounded px-1.5 py-0.5 bg-cc-primary/20 text-cc-primary">
                               Current repo
                             </span>
                           )}
@@ -621,10 +686,29 @@ export function ProcessPanel({ sessionId }: { sessionId: string }) {
                           </div>
                         )}
                       </div>
+                      <div className="shrink-0 hidden md:flex items-center gap-1.5 flex-wrap justify-end max-w-[40%]">
+                        {uniquePorts.slice(0, 4).map((port) => (
+                          <span
+                            key={`${group.key}-port-${port}`}
+                            className="text-[9px] rounded px-1 py-0.5 bg-cc-hover text-cc-muted tabular-nums font-mono"
+                          >
+                            :{port}
+                          </span>
+                        ))}
+                        {uniquePorts.length > 4 && (
+                          <span className="text-[9px] text-cc-muted">
+                            +{uniquePorts.length - 4}
+                          </span>
+                        )}
+                      </div>
                     </button>
                   </div>
                   {!isCollapsed && (
-                    <div role="list" aria-label={`System dev processes for ${group.label}`}>
+                    <div
+                      role="list"
+                      aria-label={`System dev processes for ${group.label}`}
+                      className="ml-4 border-l border-cc-border/40"
+                    >
                       {group.processes.map((proc) => (
                         <SystemProcessRow
                           key={proc.pid}
