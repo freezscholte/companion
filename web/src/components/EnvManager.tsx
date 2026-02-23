@@ -344,7 +344,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
           {loading ? (
             <div className="py-12 text-center text-sm text-cc-muted">Loading environments...</div>
           ) : envs.length === 0 ? (
-            <EnvEmptyState />
+            <div className="py-12 text-center text-sm text-cc-muted">No environments yet.</div>
           ) : (
             <div className="space-y-1">
               {envs.map((env) => {
@@ -853,23 +853,6 @@ function EnvRow({ env, varCount, onStartEdit, onDelete }: EnvRowProps) {
   );
 }
 
-/* ─── Empty State ─────────────────────────────────────────────────── */
-
-function EnvEmptyState() {
-  return (
-    <div className="py-16 flex flex-col items-center text-center">
-      <div className="w-12 h-12 rounded-full bg-cc-primary/10 flex items-center justify-center mb-4">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5 text-cc-primary">
-          <path d="M12 3v18M3 12h18M4.5 6.5l15 0M4.5 17.5h15M6.5 4.5v15M17.5 4.5v15" />
-        </svg>
-      </div>
-      <p className="text-sm text-cc-fg font-medium mb-1">No environments yet</p>
-      <p className="text-xs text-cc-muted max-w-xs">
-        Environments let you define variables, Docker settings, and init scripts for your sessions.
-      </p>
-    </div>
-  );
-}
 
 /* ─── Key-Value Editor ────────────────────────────────────────────── */
 

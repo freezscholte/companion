@@ -230,7 +230,7 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
         {loading ? (
           <div className="py-12 text-center text-sm text-cc-muted">Loading prompts...</div>
         ) : prompts.length === 0 ? (
-          <EmptyState />
+          <div className="py-12 text-center text-sm text-cc-muted">No prompts yet.</div>
         ) : filteredPrompts.length === 0 ? (
           <div className="py-12 text-center text-sm text-cc-muted">No prompts match your search.</div>
         ) : (
@@ -377,20 +377,3 @@ function PromptRow({
   );
 }
 
-/* ─── Empty State ─────────────────────────────────────────────────── */
-
-function EmptyState() {
-  return (
-    <div className="py-16 flex flex-col items-center text-center">
-      <div className="w-12 h-12 rounded-full bg-cc-primary/10 flex items-center justify-center mb-4">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5 text-cc-primary">
-          <path d="M7 8h10M7 12h6M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-4 4V5Z" />
-        </svg>
-      </div>
-      <p className="text-sm text-cc-fg font-medium mb-1">No prompts yet</p>
-      <p className="text-xs text-cc-muted max-w-xs">
-        Saved prompts let you reuse common instructions. Reference them with <code className="text-cc-fg bg-cc-hover rounded px-1 py-0.5 text-[11px]">@title</code> in the composer.
-      </p>
-    </div>
-  );
-}

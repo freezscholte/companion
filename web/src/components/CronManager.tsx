@@ -328,18 +328,7 @@ export function CronManager({ onClose, embedded = false }: Props) {
           {loading ? (
             <div className="py-12 text-center text-sm text-cc-muted">Loading scheduled tasks...</div>
           ) : jobs.length === 0 ? (
-            <div className="py-16 flex flex-col items-center text-center">
-              <div className="w-12 h-12 rounded-full bg-cc-primary/10 flex items-center justify-center mb-4">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5 text-cc-primary">
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M12 6v6l4 2" />
-                </svg>
-              </div>
-              <p className="text-sm text-cc-fg font-medium mb-1">No scheduled tasks yet</p>
-              <p className="text-xs text-cc-muted max-w-xs">
-                Schedule autonomous sessions to run tests, generate reports, or maintain your codebase.
-              </p>
-            </div>
+            <div className="py-12 text-center text-sm text-cc-muted">No scheduled tasks yet.</div>
           ) : (
             <div className="space-y-1">
               {jobs.map((job) => {
@@ -834,20 +823,19 @@ function JobForm({
 
       {/* Backend + Model + Folder row */}
       <div className="flex flex-wrap items-center gap-1.5">
-        {/* Backend toggle */}
-        <button
-          onClick={() => {
-            const next = form.backendType === "claude" ? "codex" : "claude";
-            update({ backendType: next as "claude" | "codex", model: getDefaultModel(next as "claude" | "codex") });
+        {/* Backend selector */}
+        <select
+          value={form.backendType}
+          onChange={(e) => {
+            const next = e.target.value as "claude" | "codex";
+            update({ backendType: next, model: getDefaultModel(next) });
           }}
-          className={`px-2.5 py-2 min-h-[44px] text-xs font-medium rounded-lg transition-colors cursor-pointer ${
-            form.backendType === "codex"
-              ? "bg-blue-500/15 text-blue-500"
-              : "bg-[#5BA8A0]/15 text-[#5BA8A0]"
-          }`}
+          className="px-2.5 py-2 min-h-[44px] text-xs font-medium rounded-lg bg-cc-bg text-cc-fg cursor-pointer focus:outline-none focus:ring-1 focus:ring-cc-primary/40 transition-shadow appearance-none pr-7 bg-no-repeat bg-[length:12px] bg-[right_8px_center]"
+          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%236f6e69'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E")` }}
         >
-          {form.backendType === "codex" ? "Codex" : "Claude Code"}
-        </button>
+          <option value="claude">Claude Code</option>
+          <option value="codex">Codex</option>
+        </select>
 
         {/* Model dropdown */}
         <div className="relative" ref={modelDropdownRef}>
