@@ -130,7 +130,11 @@ export function TopBar() {
       <div className="h-full flex items-center gap-1 min-w-0">
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="flex items-center justify-center w-8 h-8 rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer shrink-0"
+          className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors cursor-pointer shrink-0 ${
+            sidebarOpen
+              ? "text-cc-primary bg-cc-active"
+              : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+          }`}
           aria-label="Toggle sidebar"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-[15px] h-[15px]">
