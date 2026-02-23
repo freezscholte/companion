@@ -132,6 +132,21 @@ describe("SettingsPage", () => {
     expect(screen.getByDisplayValue("openrouter/free")).toBeInTheDocument();
   });
 
+  // When a key is already configured, the input shows masked dots (••••) to
+  // visually indicate a key is present. The dots clear on focus so the user
+  // can type a replacement key.
+  it("shows masked dots in API key field when key is configured", async () => {
+    render(<SettingsPage />);
+    await screen.findByText("OpenRouter key configured");
+
+    const input = screen.getByLabelText("OpenRouter API Key") as HTMLInputElement;
+    expect(input.value).toBe("••••••••••••••••");
+
+    // On focus the dots clear to allow entering a new key
+    fireEvent.focus(input);
+    expect(input.value).toBe("");
+  });
+
   it("shows not configured status", async () => {
     mockApi.getSettings.mockResolvedValueOnce({
       openrouterApiKeyConfigured: false,

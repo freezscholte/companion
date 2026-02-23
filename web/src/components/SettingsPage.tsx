@@ -47,6 +47,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [updateError, setUpdateError] = useState("");
   const [telemetryEnabled, setTelemetryEnabled] = useState(getTelemetryPreferenceEnabled());
   const [activeSection, setActiveSection] = useState<CategoryId>("general");
+  const [apiKeyFocused, setApiKeyFocused] = useState(false);
 
   const contentRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -338,9 +339,11 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                   <input
                     id="openrouter-key"
                     type="password"
-                    value={openrouterApiKey}
+                    value={configured && !apiKeyFocused && !openrouterApiKey ? "••••••••••••••••" : openrouterApiKey}
                     onChange={(e) => setOpenrouterApiKey(e.target.value)}
-                    placeholder={configured ? "Configured. Enter a new key to replace." : "sk-or-v1-..."}
+                    onFocus={() => setApiKeyFocused(true)}
+                    onBlur={() => setApiKeyFocused(false)}
+                    placeholder={configured ? "Enter a new key to replace" : "sk-or-v1-..."}
                     className="w-full px-3 py-2.5 min-h-[44px] text-sm bg-cc-bg rounded-lg text-cc-fg placeholder:text-cc-muted focus:outline-none focus:ring-1 focus:ring-cc-primary/40 transition-shadow"
                   />
                   <p className="mt-1.5 text-xs text-cc-muted">
