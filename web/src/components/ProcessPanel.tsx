@@ -355,9 +355,12 @@ function SystemProcessRow({
                 target="_blank"
                 rel="noreferrer"
                 aria-label={`Open http://localhost:${port}`}
-                className="text-[9px] rounded px-1 py-0.5 bg-cc-active/60 text-cc-muted tabular-nums font-mono"
+                className="inline-flex items-center gap-0.5 text-[9px] rounded px-1 py-0.5 bg-cc-primary/10 text-cc-primary hover:bg-cc-primary/20 transition-colors tabular-nums font-mono underline decoration-cc-primary/30 underline-offset-2"
               >
                 localhost:{port}
+                <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-2.5 h-2.5 shrink-0" aria-hidden="true">
+                  <path d="M4.5 2.5h-2v7h7v-2M7 2.5h2.5V5M5.5 6.5l4-4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </a>
             ))}
           </div>
@@ -433,13 +436,13 @@ function Spinner({
   size = "sm",
   className = "",
 }: {
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
   className?: string;
 }) {
-  const dims = size === "md" ? "w-4 h-4" : "w-3 h-3";
+  const dims = size === "lg" ? "w-8 h-8" : size === "md" ? "w-4 h-4" : "w-3 h-3";
   return (
     <span
-      className={`inline-block ${dims} rounded-full border border-current border-t-transparent animate-spin ${className}`}
+      className={`inline-block ${dims} rounded-full border-2 border-current border-t-transparent animate-spin ${className}`}
       aria-hidden="true"
     />
   );
@@ -455,38 +458,74 @@ function LoadingSkeletonBar({
   );
 }
 
-function ProcessPanelLoadingSkeleton() {
+function ProcessPanelLoadingPreview() {
   return (
     <div className="w-full max-w-[560px] mt-6 rounded-lg border border-cc-border bg-cc-hover/10 overflow-hidden">
-      {[0, 1].map((groupIdx) => (
-        <div key={groupIdx} className="border-b border-cc-border last:border-b-0">
-          <div className="px-4 py-3 bg-cc-hover/20">
-            <div className="flex items-center gap-2 mb-2">
-              <Spinner size="sm" className="text-cc-muted/70" />
-              <div className="text-[9px] rounded px-1 py-0.5 border border-cc-border text-cc-muted uppercase tracking-wide">
-                Folder
-              </div>
-              <LoadingSkeletonBar widthClass={groupIdx === 0 ? "w-24" : "w-32"} />
-              <LoadingSkeletonBar widthClass="w-16" />
-            </div>
-            <LoadingSkeletonBar widthClass="w-64" />
+      <div className="px-4 py-3 bg-cc-hover/20 border-b border-cc-border">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="inline-flex items-center justify-center w-4 h-4 text-cc-muted/80">
+            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
+              <path d="M4.25 2.5L7.75 6 4.25 9.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          <div className="text-[9px] rounded px-1 py-0.5 border border-cc-border text-cc-muted uppercase tracking-wide">
+            Folder
           </div>
-          <div className="ml-4 border-l border-cc-border/30">
-            <div className="px-4 py-3">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-cc-primary/70 animate-pulse" />
-                <LoadingSkeletonBar widthClass="w-40" />
-              </div>
-              <div className="flex items-center gap-2 mb-2">
-                <LoadingSkeletonBar widthClass="w-12" />
-                <LoadingSkeletonBar widthClass="w-20" />
-                <LoadingSkeletonBar widthClass="w-24" />
-              </div>
-              <LoadingSkeletonBar widthClass="w-72" />
-            </div>
-          </div>
+          <LoadingSkeletonBar widthClass="w-24" />
+          <LoadingSkeletonBar widthClass="w-20" />
         </div>
-      ))}
+        <LoadingSkeletonBar widthClass="w-56" />
+      </div>
+      <div className="ml-4 border-l border-cc-border/30">
+        {[0, 1].map((rowIdx) => (
+          <div key={rowIdx} className={`px-4 py-3 ${rowIdx === 0 ? "border-b border-cc-border/40" : ""}`}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-cc-primary/70 animate-pulse" />
+              <LoadingSkeletonBar widthClass={rowIdx === 0 ? "w-40" : "w-32"} />
+            </div>
+            <div className="flex items-center gap-2 mb-2">
+              <LoadingSkeletonBar widthClass="w-12" />
+              <LoadingSkeletonBar widthClass="w-20" />
+              <LoadingSkeletonBar widthClass="w-24" />
+            </div>
+            <LoadingSkeletonBar widthClass={rowIdx === 0 ? "w-72" : "w-64"} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LoadingStepRow({
+  label,
+  state,
+}: {
+  label: string;
+  state: "pending" | "active" | "done";
+}) {
+  return (
+    <div className="flex items-center gap-2 text-[11px]">
+      <span
+        className={`inline-flex items-center justify-center w-4 h-4 rounded-full border ${
+          state === "done"
+            ? "border-emerald-400/50 bg-emerald-400/10 text-emerald-300"
+            : state === "active"
+              ? "border-cc-primary/50 bg-cc-primary/10 text-cc-primary"
+              : "border-cc-border text-cc-muted/70"
+        }`}
+        aria-hidden="true"
+      >
+        {state === "active" ? (
+          <Spinner size="sm" className="text-current" />
+        ) : state === "done" ? (
+          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3 h-3">
+            <path d="M2.5 6.2l2.1 2.1 4.9-4.9" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ) : (
+          <span className="w-1.5 h-1.5 rounded-full bg-current/60" />
+        )}
+      </span>
+      <span className={state === "active" ? "text-cc-fg" : "text-cc-muted"}>{label}</span>
     </div>
   );
 }
@@ -498,22 +537,49 @@ function ProcessPanelLoadingState({
   title: string;
   subtitle: string;
 }) {
+  const loadingSteps = [
+    "Scanning listening ports",
+    "Resolving process commands",
+    "Grouping by project folder",
+  ] as const;
+  const [activeStep, setActiveStep] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setActiveStep((prev) => (prev + 1) % loadingSteps.length);
+    }, 850);
+    return () => clearInterval(timer);
+  }, [loadingSteps.length]);
+
   return (
     <div className="h-full flex flex-col items-center justify-center px-6 text-center bg-cc-bg" aria-live="polite">
-      <div className="relative w-14 h-14 mb-3 text-cc-muted/60">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+      <div className="relative w-16 h-16 mb-3 text-cc-muted/60">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-full h-full">
           <path d="M8 9h8m-8 4h6m-2-10h2.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        <span className="absolute -right-1.5 -bottom-1.5 w-6 h-6 rounded-full border border-cc-border bg-cc-hover/90 flex items-center justify-center shadow-sm">
-          <Spinner size="md" className="text-cc-muted" />
-        </span>
+        <span className="absolute inset-0 rounded-full border border-cc-primary/20 motion-safe:animate-ping" aria-hidden="true" />
       </div>
-      <h3 className="text-sm font-medium text-cc-fg mb-1 flex items-center gap-2">
-        <Spinner size="sm" className="text-cc-primary" />
-        {title}
-      </h3>
-      <p className="text-xs text-cc-muted max-w-[290px]">{subtitle}</p>
-      <ProcessPanelLoadingSkeleton />
+      <div className="mb-3 flex items-center gap-3 rounded-full border border-cc-border bg-cc-hover/20 px-3 py-2">
+        <Spinner size="lg" className="text-cc-primary" />
+        <div className="text-left">
+          <div className="text-xs font-medium text-cc-fg">{title}</div>
+          <div className="text-[10px] text-cc-muted">This can take a second on larger machines.</div>
+        </div>
+      </div>
+      <p className="text-xs text-cc-muted max-w-[320px] mb-4">{subtitle}</p>
+      <div className="w-full max-w-[360px] rounded-lg border border-cc-border bg-cc-hover/10 p-3 text-left">
+        <div className="text-[10px] uppercase tracking-wide text-cc-muted mb-2">Scan progress</div>
+        <div className="space-y-2">
+          {loadingSteps.map((step, index) => {
+            const state = index < activeStep ? "done" : index === activeStep ? "active" : "pending";
+            return <LoadingStepRow key={step} label={step} state={state} />;
+          })}
+        </div>
+      </div>
+      <p className="mt-4 text-[10px] text-cc-muted/90 uppercase tracking-wide">
+        Previewing result layout
+      </p>
+      <ProcessPanelLoadingPreview />
     </div>
   );
 }
