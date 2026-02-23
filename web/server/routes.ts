@@ -1035,11 +1035,11 @@ export function createRoutes(
         if (session.containerId) {
           containerManager.execInContainer(
             session.containerId,
-            ["sh", "-c", `pkill -f '${taskId}' 2>/dev/null; true`],
+            ["sh", "-c", `pkill -f ${shellEscapeArg(taskId)} 2>/dev/null; true`],
             5_000,
           );
         } else {
-          execSync(`pkill -f '${taskId}' 2>/dev/null; true`, {
+          execSync(`pkill -f ${shellEscapeArg(taskId)} 2>/dev/null; true`, {
             timeout: 5_000,
             encoding: "utf-8",
           });
