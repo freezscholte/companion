@@ -50,6 +50,16 @@ function makeSystemProcess(overrides: Partial<SystemProcess> = {}): SystemProces
 
 let mockState: MockStoreState;
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 function resetStore(overrides: Partial<MockStoreState> = {}) {
   mockState = {
     sessions: new Map(),
@@ -93,11 +103,38 @@ beforeEach(() => {
 });
 
 describe("ProcessPanel", () => {
-  it("renders empty state when no processes exist", () => {
-    // Empty panel should show instructional text
+  it("shows loading state while the initial dev server scan is running", async () => {
+    const pending = deferred<{ ok: boolean; processes: SystemProcess[] }>();
+    mockGetSystemProcesses.mockReturnValueOnce(pending.promise);
     render(<ProcessPanel sessionId="s1" />);
-    expect(screen.getByText("No background processes")).toBeInTheDocument();
+
+    expect(screen.getByText("Searching for running dev servers...")).toBeInTheDocument();
+    expect(screen.getByText(/Checking listening ports/)).toBeInTheDocument();
+
+    pending.resolve({ ok: true, processes: [] });
+    await waitFor(() => {
+      expect(screen.getByText("No background processes")).toBeInTheDocument();
+    });
+  });
+
+  it("renders empty state when no processes exist", async () => {
+    // Empty panel should show instructional text after initial scan completes.
+    render(<ProcessPanel sessionId="s1" />);
+    await waitFor(() => {
+      expect(screen.getByText("No background processes")).toBeInTheDocument();
+    });
     expect(screen.getByText(/dev servers listening on ports/)).toBeInTheDocument();
+  });
+
+  it("shows an error state when the initial dev server scan fails", async () => {
+    mockGetSystemProcesses.mockRejectedValueOnce(new Error("lsof failed"));
+    render(<ProcessPanel sessionId="s1" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Couldn't scan dev servers")).toBeInTheDocument();
+      expect(screen.getByText(/lsof failed/)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Retry scan" })).toBeInTheDocument();
+    });
   });
 
   it("renders a running process with description, taskId, and kill button", () => {
@@ -322,8 +359,10 @@ describe("ProcessPanel system processes", () => {
     });
 
     // Current repo should start expanded; other folders should start collapsed.
-    expect(screen.getByRole("button", { name: "Toggle process group app" })).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("button", { name: "Toggle process group worker" })).toHaveAttribute("aria-expanded", "false");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Toggle process group app" })).toHaveAttribute("aria-expanded", "true");
+      expect(screen.getByRole("button", { name: "Toggle process group worker" })).toHaveAttribute("aria-expanded", "false");
+    });
 
     await expandSystemGroup("worker");
 

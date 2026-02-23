@@ -6,6 +6,7 @@ const getFileTreeMock = vi.hoisted(() => vi.fn());
 const readFileMock = vi.hoisted(() => vi.fn());
 const writeFileMock = vi.hoisted(() => vi.fn());
 const getFileBlobMock = vi.hoisted(() => vi.fn());
+const getChangedFilesMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../api.js", () => ({
   api: {
@@ -13,6 +14,7 @@ vi.mock("../api.js", () => ({
     readFile: readFileMock,
     writeFile: writeFileMock,
     getFileBlob: getFileBlobMock,
+    getChangedFiles: getChangedFilesMock,
   },
 }));
 
@@ -54,6 +56,8 @@ import { SessionEditorPane } from "./SessionEditorPane.js";
 beforeEach(() => {
   vi.clearAllMocks();
   resetStore();
+  // Default: no git-modified files (most tests don't care about git status)
+  getChangedFilesMock.mockResolvedValue({ files: [] });
 });
 
 // Helper: both desktop and mobile layouts render in jsdom (CSS hidden doesn't apply),
@@ -443,5 +447,41 @@ describe("SessionEditorPane", () => {
     });
     expect(screen.queryByTitle("index.js")).not.toBeInTheDocument();
     expect(screen.queryByTitle("src/styles.css")).not.toBeInTheDocument();
+  });
+
+  it("highlights git-modified files with color indicators", async () => {
+    // Files with uncommitted changes should get colored text in the tree:
+    // modified → amber, added/untracked → green
+    getFileTreeMock.mockResolvedValue({
+      path: "/repo",
+      tree: [
+        { name: "clean.ts", path: "/repo/clean.ts", type: "file" },
+        { name: "modified.ts", path: "/repo/modified.ts", type: "file" },
+        { name: "new-file.ts", path: "/repo/new-file.ts", type: "file" },
+      ],
+    });
+    getChangedFilesMock.mockResolvedValue({
+      files: [
+        { path: "/repo/modified.ts", status: "M" },
+        { path: "/repo/new-file.ts", status: "A" },
+      ],
+    });
+    render(<SessionEditorPane sessionId="s1" />);
+
+    // Wait for tree + git status to load
+    await waitFor(() => expect(getChangedFilesMock).toHaveBeenCalled());
+
+    // Modified file should have amber color class
+    const modifiedBtns = await screen.findAllByText("modified.ts");
+    expect(modifiedBtns[0].className).toContain("text-amber-400");
+
+    // New/added file should have green color class
+    const addedBtns = await screen.findAllByText("new-file.ts");
+    expect(addedBtns[0].className).toContain("text-green-400");
+
+    // Clean file should NOT have git color classes
+    const cleanBtns = await screen.findAllByText("clean.ts");
+    expect(cleanBtns[0].className).not.toContain("text-amber-400");
+    expect(cleanBtns[0].className).not.toContain("text-green-400");
   });
 });

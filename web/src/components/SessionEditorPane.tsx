@@ -113,23 +113,39 @@ function flattenTree(nodes: TreeNode[], cwd: string): { path: string; relPath: s
   return results;
 }
 
+/** Map git status code to a text color class. */
+function gitStatusColor(status: string | undefined): string {
+  if (!status) return "";
+  switch (status) {
+    case "M": return "text-amber-400";
+    case "A": return "text-green-400";
+    case "D": return "text-red-400 line-through";
+    default: return "";
+  }
+}
+
 interface TreeEntryProps {
   node: TreeNode;
   depth: number;
   cwd: string;
   selectedPath: string | null;
   onSelect: (path: string) => void;
+  gitStatus?: Map<string, string>;
 }
 
-function TreeEntry({ node, depth, cwd, selectedPath, onSelect }: TreeEntryProps) {
+function TreeEntry({ node, depth, cwd, selectedPath, onSelect, gitStatus }: TreeEntryProps) {
   const [open, setOpen] = useState(false);
   if (node.type === "directory") {
+    // A directory is "dirty" if any descendant file has a git status
+    const dirHasChanges = gitStatus ? [...gitStatus.keys()].some((p) => p.startsWith(`${node.path}/`)) : false;
     return (
       <div>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="w-full flex items-center gap-1.5 py-1.5 pr-2 text-left text-xs text-cc-muted hover:text-cc-fg hover:bg-cc-hover rounded cursor-pointer"
+          className={`w-full flex items-center gap-1.5 py-1.5 pr-2 text-left text-xs hover:text-cc-fg hover:bg-cc-hover rounded cursor-pointer ${
+            dirHasChanges ? "text-amber-400/70" : "text-cc-muted"
+          }`}
           style={{ paddingLeft: `${8 + depth * 12}px` }}
           aria-label={`Toggle ${relPath(cwd, node.path)}`}
         >
@@ -144,6 +160,7 @@ function TreeEntry({ node, depth, cwd, selectedPath, onSelect }: TreeEntryProps)
             cwd={cwd}
             selectedPath={selectedPath}
             onSelect={onSelect}
+            gitStatus={gitStatus}
           />
         ))}
       </div>
@@ -151,12 +168,14 @@ function TreeEntry({ node, depth, cwd, selectedPath, onSelect }: TreeEntryProps)
   }
 
   const selected = selectedPath === node.path;
+  const fileStatus = gitStatus?.get(node.path);
+  const statusColor = gitStatusColor(fileStatus);
   return (
     <button
       type="button"
       onClick={() => onSelect(node.path)}
       className={`w-full py-1.5 pr-2 text-left text-xs rounded truncate cursor-pointer ${
-        selected ? "bg-cc-active text-cc-fg" : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+        selected ? "bg-cc-active text-cc-fg" : statusColor || "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
       }`}
       style={{ paddingLeft: `${26 + depth * 12}px` }}
       title={relPath(cwd, node.path)}
@@ -176,6 +195,7 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
   // Bumped when Claude edits a file — triggers tree + open file refresh
   const changedFilesTick = useStore((s) => s.changedFilesTick.get(sessionId) ?? 0);
   const [tree, setTree] = useState<TreeNode[]>([]);
+  const [gitStatus, setGitStatus] = useState<Map<string, string>>(new Map());
   const [loadingTree, setLoadingTree] = useState(true);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [content, setContent] = useState("");
@@ -286,7 +306,7 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [searchActive, openSearch, closeSearch]);
 
-  // Load file tree when cwd changes, when Claude edits files, or on manual refresh
+  // Load file tree and git status when cwd changes, when Claude edits files, or on manual refresh
   useEffect(() => {
     if (!cwd) {
       setLoadingTree(false);
@@ -295,9 +315,13 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
     let cancelled = false;
     setLoadingTree(true);
     setError(null);
-    api.getFileTree(cwd).then((res) => {
+    // Fetch tree and git status in parallel
+    const treePromise = api.getFileTree(cwd);
+    const gitPromise = api.getChangedFiles(cwd, "last-commit").catch(() => ({ files: [] }));
+    Promise.all([treePromise, gitPromise]).then(([treeRes, gitRes]) => {
       if (cancelled) return;
-      setTree(res.tree);
+      setTree(treeRes.tree);
+      setGitStatus(new Map(gitRes.files.map((f) => [f.path, f.status])));
     }).catch((err) => {
       if (cancelled) return;
       setError(err instanceof Error ? err.message : "Failed to load file tree");
@@ -503,7 +527,9 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
             {searchResults.length === 0 && searchQuery.trim() && (
               <div className="px-2 py-2 text-xs text-cc-muted">No files found.</div>
             )}
-            {searchResults.map((item, i) => (
+            {searchResults.map((item, i) => {
+              const sColor = gitStatusColor(gitStatus.get(item.path));
+              return (
               <button
                 key={item.path}
                 type="button"
@@ -511,13 +537,14 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
                 className={`w-full text-left px-2 py-1.5 text-xs rounded truncate cursor-pointer ${
                   i === searchSelectedIndex
                     ? "bg-cc-active text-cc-fg"
-                    : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+                    : sColor || "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
                 }`}
                 title={item.relPath}
               >
                 {item.relPath}
               </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -540,6 +567,7 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
               cwd={cwd}
               selectedPath={selectedPath}
               onSelect={handleSelectFile}
+              gitStatus={gitStatus}
             />
           ))}
         </div>
