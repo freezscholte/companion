@@ -12,7 +12,8 @@ let tempDir: string;
 beforeEach(() => {
   tempDir = mkdtempSync(join(tmpdir(), "fs-raw-test-"));
   app = new Hono();
-  registerFsRoutes(app);
+  // Pass tempDir as an allowed base so test files are accessible
+  registerFsRoutes(app, { allowedBases: [tempDir] });
 });
 
 afterAll(() => {
@@ -88,5 +89,74 @@ describe("GET /fs/raw", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toMatch(/image\/svg|application\/octet-stream/);
+  });
+});
+
+describe("path traversal protection", () => {
+  it("rejects /fs/read for paths outside allowed bases", async () => {
+    // Attempting to read /etc/passwd should be blocked by the path guard
+    const res = await app.request(`/fs/read?path=${encodeURIComponent("/etc/passwd")}`);
+
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toMatch(/outside allowed/i);
+  });
+
+  it("rejects /fs/raw for paths outside allowed bases", async () => {
+    const res = await app.request(`/fs/raw?path=${encodeURIComponent("/etc/hosts")}`);
+
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toMatch(/outside allowed/i);
+  });
+
+  it("rejects /fs/list for paths outside allowed bases", async () => {
+    const res = await app.request(`/fs/list?path=${encodeURIComponent("/etc")}`);
+
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toMatch(/outside allowed/i);
+  });
+
+  it("rejects /fs/tree for paths outside allowed bases", async () => {
+    const res = await app.request(`/fs/tree?path=${encodeURIComponent("/etc")}`);
+
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toMatch(/outside allowed/i);
+  });
+
+  it("rejects /fs/write for paths outside allowed bases", async () => {
+    const res = await app.request("/fs/write", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: "/tmp/evil.txt", content: "pwned" }),
+    });
+
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toMatch(/outside allowed/i);
+  });
+
+  it("rejects directory traversal with ../ sequences", async () => {
+    // Even if the path starts within allowed base, ../ could escape it
+    const traversalPath = join(tempDir, "..", "..", "etc", "passwd");
+    const res = await app.request(`/fs/read?path=${encodeURIComponent(traversalPath)}`);
+
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toMatch(/outside allowed/i);
+  });
+
+  it("allows access to files within allowed bases", async () => {
+    // Files inside tempDir (our allowed base) should work fine
+    const filePath = join(tempDir, "allowed.txt");
+    writeFileSync(filePath, "hello");
+
+    const res = await app.request(`/fs/read?path=${encodeURIComponent(filePath)}`);
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.content).toBe("hello");
   });
 });
