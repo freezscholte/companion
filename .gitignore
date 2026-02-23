@@ -13,4 +13,4 @@ web/.env.local
 .dev-*.log
 docs/mocks/
 docs/repo-only/
-
+web/dev-dist/

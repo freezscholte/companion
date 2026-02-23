@@ -794,10 +794,11 @@ function handleParsedMessage(
           } else {
             chatMessages[existingIndex] = mergeAssistantMessage(chatMessages[existingIndex], assistantMsg);
           }
-          // Also extract tasks and changed files from history
+          // Also extract tasks, changed files, and background processes from history
           if (msg.content?.length) {
             extractTasksFromBlocks(sessionId, msg.content);
             extractChangedFilesFromBlocks(sessionId, msg.content);
+            extractProcessesFromBlocks(sessionId, msg.content);
           }
         } else if (histMsg.type === "result") {
           const r = histMsg.data;
