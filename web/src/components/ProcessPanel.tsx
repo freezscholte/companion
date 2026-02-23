@@ -5,6 +5,8 @@ import type { ProcessItem, SystemProcess } from "../types.js";
 
 const EMPTY_PROCESSES: ProcessItem[] = [];
 const SYSTEM_POLL_INTERVAL = 15_000;
+type SystemScanPhase = "not_started" | "initial_loading" | "refreshing" | "loaded" | "error";
+type SystemScanReason = "initial" | "manual" | "poll";
 
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000);
@@ -15,6 +17,16 @@ function formatDuration(ms: number): string {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
   return `${hours}h ${mins}m`;
+}
+
+function formatRelativeTime(ms: number): string {
+  const seconds = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+  if (seconds < 5) return "just now";
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ago`;
 }
 
 function truncateCommand(cmd: string, max = 60): string {
@@ -224,7 +236,7 @@ function ProcessRow({
   return (
     <div
       role="listitem"
-      className={`px-4 py-2.5 border-b border-cc-border hover:bg-cc-hover/50 transition-colors ${process.status !== "running" ? "opacity-60" : ""}`}
+      className={`px-4 py-2.5 hover:bg-cc-hover/50 transition-colors ${process.status !== "running" ? "opacity-60" : ""}`}
       data-testid="process-row"
     >
       <div className="flex items-start gap-2">
@@ -311,7 +323,7 @@ function SystemProcessRow({
   return (
     <div
       role="listitem"
-      className="px-4 py-2.5 border-b border-cc-border hover:bg-cc-hover/50 transition-colors"
+      className="px-4 py-2.5 hover:bg-cc-hover/50 transition-colors"
       data-testid="system-process-row"
     >
       <div className="flex items-start gap-2">
@@ -330,7 +342,7 @@ function SystemProcessRow({
           </div>
 
           <div className="mt-0.5 flex items-center gap-1.5 flex-wrap text-[10px] text-cc-muted">
-            <span className="rounded px-1 py-0.5 bg-cc-hover text-[9px] font-mono text-cc-fg/80">
+            <span className="rounded px-1 py-0.5 bg-cc-active/60 text-[9px] font-mono text-cc-fg/80">
               {proc.command}
             </span>
             <span>PID: {proc.pid}</span>
@@ -343,7 +355,7 @@ function SystemProcessRow({
                 target="_blank"
                 rel="noreferrer"
                 aria-label={`Open http://localhost:${port}`}
-                className="text-[9px] rounded px-1 py-0.5 bg-cc-hover text-cc-muted tabular-nums font-mono"
+                className="text-[9px] rounded px-1 py-0.5 bg-cc-active/60 text-cc-muted tabular-nums font-mono"
               >
                 localhost:{port}
               </a>
@@ -382,11 +394,156 @@ function SystemProcessRow({
 
 function SectionHeader({ title, count, action }: { title: string; count?: number; action?: React.ReactNode }) {
   return (
-    <div className="shrink-0 px-4 py-2 border-b border-cc-border flex items-center justify-between bg-cc-bg">
+    <div className="shrink-0 px-4 py-2 flex items-center justify-between bg-cc-bg">
       <span className="text-[11px] text-cc-muted uppercase tracking-wider">
         {title}{count !== undefined && count > 0 ? ` (${count})` : ""}
       </span>
       {action}
+    </div>
+  );
+}
+
+function ScanStatusPill({
+  text,
+  spinning = false,
+  tone = "muted",
+}: {
+  text: string;
+  spinning?: boolean;
+  tone?: "muted" | "error";
+}) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] ${
+        tone === "error" ? "bg-cc-error/10 text-cc-error" : "bg-cc-hover text-cc-muted"
+      }`}
+    >
+      {spinning && (
+        <span
+          className="inline-block w-2 h-2 rounded-full border border-current border-t-transparent animate-spin"
+          aria-hidden="true"
+        />
+      )}
+      {text}
+    </span>
+  );
+}
+
+function Spinner({
+  size = "sm",
+  className = "",
+}: {
+  size?: "sm" | "md";
+  className?: string;
+}) {
+  const dims = size === "md" ? "w-4 h-4" : "w-3 h-3";
+  return (
+    <span
+      className={`inline-block ${dims} rounded-full border border-current border-t-transparent animate-spin ${className}`}
+      aria-hidden="true"
+    />
+  );
+}
+
+function LoadingSkeletonBar({
+  widthClass,
+}: {
+  widthClass: string;
+}) {
+  return (
+    <div className={`h-2 rounded bg-cc-hover/70 animate-pulse ${widthClass}`} aria-hidden="true" />
+  );
+}
+
+function ProcessPanelLoadingSkeleton() {
+  return (
+    <div className="w-full max-w-[560px] mt-6 rounded-lg border border-cc-border bg-cc-hover/10 overflow-hidden">
+      {[0, 1].map((groupIdx) => (
+        <div key={groupIdx} className="border-b border-cc-border last:border-b-0">
+          <div className="px-4 py-3 bg-cc-hover/20">
+            <div className="flex items-center gap-2 mb-2">
+              <Spinner size="sm" className="text-cc-muted/70" />
+              <div className="text-[9px] rounded px-1 py-0.5 border border-cc-border text-cc-muted uppercase tracking-wide">
+                Folder
+              </div>
+              <LoadingSkeletonBar widthClass={groupIdx === 0 ? "w-24" : "w-32"} />
+              <LoadingSkeletonBar widthClass="w-16" />
+            </div>
+            <LoadingSkeletonBar widthClass="w-64" />
+          </div>
+          <div className="ml-4 border-l border-cc-border/30">
+            <div className="px-4 py-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-cc-primary/70 animate-pulse" />
+                <LoadingSkeletonBar widthClass="w-40" />
+              </div>
+              <div className="flex items-center gap-2 mb-2">
+                <LoadingSkeletonBar widthClass="w-12" />
+                <LoadingSkeletonBar widthClass="w-20" />
+                <LoadingSkeletonBar widthClass="w-24" />
+              </div>
+              <LoadingSkeletonBar widthClass="w-72" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ProcessPanelLoadingState({
+  title,
+  subtitle,
+}: {
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <div className="h-full flex flex-col items-center justify-center px-6 text-center bg-cc-bg" aria-live="polite">
+      <div className="relative w-14 h-14 mb-3 text-cc-muted/60">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+          <path d="M8 9h8m-8 4h6m-2-10h2.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <span className="absolute -right-1.5 -bottom-1.5 w-6 h-6 rounded-full border border-cc-border bg-cc-hover/90 flex items-center justify-center shadow-sm">
+          <Spinner size="md" className="text-cc-muted" />
+        </span>
+      </div>
+      <h3 className="text-sm font-medium text-cc-fg mb-1 flex items-center gap-2">
+        <Spinner size="sm" className="text-cc-primary" />
+        {title}
+      </h3>
+      <p className="text-xs text-cc-muted max-w-[290px]">{subtitle}</p>
+      <ProcessPanelLoadingSkeleton />
+    </div>
+  );
+}
+
+function ProcessPanelErrorState({
+  message,
+  onRetry,
+  retrying,
+}: {
+  message: string;
+  onRetry: () => void;
+  retrying: boolean;
+}) {
+  return (
+    <div className="h-full flex flex-col items-center justify-center px-6 text-center bg-cc-bg">
+      <div className="w-12 h-12 mb-3 text-cc-error/60">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+          <path d="M12 9v4m0 4h.01M10.29 3.86l-7.4 12.82A1 1 0 003.76 18h16.48a1 1 0 00.87-1.5l-7.4-12.82a1 1 0 00-1.74 0z" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </div>
+      <h3 className="text-sm font-medium text-cc-fg mb-1">Couldn&apos;t scan dev servers</h3>
+      <p className="text-xs text-cc-muted max-w-[320px]">{message}</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        disabled={retrying}
+        className="mt-3 text-[11px] text-cc-muted hover:text-cc-fg disabled:opacity-50 transition-colors cursor-pointer px-3 py-2 rounded border border-cc-border hover:bg-cc-hover"
+      >
+        {retrying ? "Retrying..." : "Retry scan"}
+      </button>
     </div>
   );
 }
@@ -401,7 +558,12 @@ export function ProcessPanel({ sessionId }: { sessionId: string }) {
   const [killingPids, setKillingPids] = useState<Set<number>>(new Set());
   const [collapsedSystemGroups, setCollapsedSystemGroups] = useState<Set<string>>(new Set());
   const userToggledSystemGroupsRef = useRef<Set<string>>(new Set());
-  const [refreshing, setRefreshing] = useState(false);
+  const [systemScanPhase, setSystemScanPhase] = useState<SystemScanPhase>("not_started");
+  const [systemScanReason, setSystemScanReason] = useState<SystemScanReason>("initial");
+  const [systemScanError, setSystemScanError] = useState<string | null>(null);
+  const [hasSystemScanCompleted, setHasSystemScanCompleted] = useState(false);
+  const [lastSystemScanAt, setLastSystemScanAt] = useState<number | null>(null);
+  const scanRequestIdRef = useRef(0);
   const cancelledRef = useRef(false);
 
   const runningProcesses = processes.filter((p) => p.status === "running");
@@ -447,22 +609,40 @@ export function ProcessPanel({ sessionId }: { sessionId: string }) {
     });
   }, [systemGroups]);
 
-  const fetchSystemProcesses = useCallback(async () => {
+  const fetchSystemProcesses = useCallback(async (reason: SystemScanReason) => {
+    const requestId = ++scanRequestIdRef.current;
+    setSystemScanReason(reason);
+    setSystemScanError(null);
+    setSystemScanPhase((prev) => {
+      if (!hasSystemScanCompleted || prev === "not_started") return "initial_loading";
+      return "refreshing";
+    });
     try {
       const result = await api.getSystemProcesses(sessionId);
-      if (!cancelledRef.current && result.processes) {
+      if (cancelledRef.current || requestId !== scanRequestIdRef.current) return;
+      if (result.processes) {
         setSystemProcesses(result.processes);
       }
+      setHasSystemScanCompleted(true);
+      setLastSystemScanAt(Date.now());
+      setSystemScanPhase("loaded");
     } catch (err) {
+      if (cancelledRef.current || requestId !== scanRequestIdRef.current) return;
+      const msg = err instanceof Error ? err.message : String(err);
+      setSystemScanError(msg);
+      setHasSystemScanCompleted(true);
+      setSystemScanPhase("error");
       console.warn("[ProcessPanel] System process scan failed:", err instanceof Error ? err.message : err);
     }
-  }, [sessionId]);
+  }, [hasSystemScanCompleted, sessionId]);
 
   // Poll for system dev processes every 15s
   useEffect(() => {
     cancelledRef.current = false;
-    fetchSystemProcesses();
-    const timer = setInterval(fetchSystemProcesses, SYSTEM_POLL_INTERVAL);
+    fetchSystemProcesses("initial");
+    const timer = setInterval(() => {
+      fetchSystemProcesses("poll");
+    }, SYSTEM_POLL_INTERVAL);
     return () => {
       cancelledRef.current = true;
       clearInterval(timer);
@@ -470,9 +650,7 @@ export function ProcessPanel({ sessionId }: { sessionId: string }) {
   }, [fetchSystemProcesses]);
 
   const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await fetchSystemProcesses();
-    setRefreshing(false);
+    await fetchSystemProcesses("manual");
   }, [fetchSystemProcesses]);
 
   const handleKill = useCallback(
@@ -550,6 +728,28 @@ export function ProcessPanel({ sessionId }: { sessionId: string }) {
   }, []);
 
   const hasAnything = processes.length > 0 || systemProcesses.length > 0;
+  const isSystemScanLoading = systemScanPhase === "initial_loading" || systemScanPhase === "refreshing";
+  const isInitialSystemScanLoading = !hasSystemScanCompleted && (systemScanPhase === "not_started" || systemScanPhase === "initial_loading");
+  const showInitialLoadingState = processes.length === 0 && isInitialSystemScanLoading;
+  const showSystemScanErrorState = processes.length === 0 && systemProcesses.length === 0 && systemScanPhase === "error";
+
+  if (showInitialLoadingState) {
+    const title = systemScanReason === "manual" ? "Refreshing process list..." : "Searching for running dev servers...";
+    const subtitle = systemScanReason === "manual"
+      ? "Updating the process list and resolving active ports."
+      : "Checking listening ports and resolving process details.";
+    return <ProcessPanelLoadingState title={title} subtitle={subtitle} />;
+  }
+
+  if (showSystemScanErrorState) {
+    return (
+      <ProcessPanelErrorState
+        message={systemScanError || "The dev server scan failed before any results were loaded."}
+        onRetry={handleRefresh}
+        retrying={isSystemScanLoading}
+      />
+    );
+  }
 
   if (!hasAnything) {
     return (
@@ -566,11 +766,12 @@ export function ProcessPanel({ sessionId }: { sessionId: string }) {
         <button
           type="button"
           onClick={handleRefresh}
-          disabled={refreshing}
-          className="mt-3 text-[11px] text-cc-muted hover:text-cc-fg disabled:opacity-50 transition-colors cursor-pointer px-3 py-2 rounded border border-cc-border hover:bg-cc-hover"
+          disabled={isSystemScanLoading}
+          className="mt-3 text-[11px] text-cc-muted hover:text-cc-fg disabled:opacity-50 transition-colors cursor-pointer px-3 py-2 rounded border border-cc-border hover:bg-cc-hover inline-flex items-center gap-2"
           aria-label="Scan for dev servers"
         >
-          {refreshing ? "Scanning..." : "Scan for dev servers"}
+          {isSystemScanLoading && <Spinner size="sm" className="text-current" />}
+          {isSystemScanLoading ? "Scanning..." : "Scan for dev servers"}
         </button>
       </div>
     );
@@ -607,7 +808,7 @@ export function ProcessPanel({ sessionId }: { sessionId: string }) {
               ))}
 
               {completedProcesses.length > 0 && runningProcesses.length > 0 && (
-                <div role="presentation" className="px-4 py-1.5 text-[10px] text-cc-muted uppercase tracking-wider border-t border-cc-border">
+                <div role="presentation" className="px-4 py-1.5 text-[10px] text-cc-muted uppercase tracking-wider">
                   Completed
                 </div>
               )}
@@ -629,24 +830,39 @@ export function ProcessPanel({ sessionId }: { sessionId: string }) {
             <SectionHeader
               title="Dev Servers"
               count={systemProcesses.length}
-              action={
-                <button
-                  type="button"
-                  onClick={handleRefresh}
-                  disabled={refreshing}
-                  className="text-[11px] px-2 py-1.5 text-cc-muted hover:text-cc-fg disabled:opacity-50 transition-colors cursor-pointer"
-                  aria-label="Refresh system processes"
-                >
-                  {refreshing ? "..." : "Refresh"}
-                </button>
-              }
+              action={(
+                <div className="flex items-center gap-2">
+                  {systemScanPhase === "refreshing" && (
+                    <ScanStatusPill
+                      text={systemScanReason === "manual" ? "Refreshing..." : "Updating..."}
+                      spinning
+                    />
+                  )}
+                  {systemScanPhase === "error" && systemProcesses.length > 0 && (
+                    <ScanStatusPill text="Refresh failed" tone="error" />
+                  )}
+                  {lastSystemScanAt && systemScanPhase !== "refreshing" && (
+                    <ScanStatusPill text={`Updated ${formatRelativeTime(lastSystemScanAt)}`} />
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleRefresh}
+                    disabled={isSystemScanLoading}
+                    className="text-[11px] px-2 py-1.5 text-cc-muted hover:text-cc-fg disabled:opacity-50 transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                    aria-label="Refresh system processes"
+                  >
+                    {systemScanPhase === "refreshing" && <Spinner size="sm" className="text-current" />}
+                    {systemScanPhase === "refreshing" && systemScanReason === "manual" ? "Refreshing..." : "Refresh"}
+                  </button>
+                </div>
+              )}
             />
             {systemGroups.map((group) => {
               const isCollapsed = collapsedSystemGroups.has(group.key);
               const uniquePorts = [...new Set(group.processes.flatMap((proc) => proc.ports))].sort((a, b) => a - b);
               return (
                 <div key={group.key}>
-                  <div className="px-4 py-2.5 border-b border-cc-border bg-cc-hover/25">
+                  <div className="px-4 py-2.5 bg-cc-hover/30">
                     <button
                       type="button"
                       onClick={() => toggleSystemGroup(group.key)}
@@ -657,17 +873,17 @@ export function ProcessPanel({ sessionId }: { sessionId: string }) {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <AccordionChevron expanded={!isCollapsed} />
-                          <span className="text-[9px] rounded px-1 py-0.5 border border-cc-border text-cc-muted uppercase tracking-wide">
+                          <span className="text-[9px] rounded px-1 py-0.5 bg-cc-active/60 text-cc-muted uppercase tracking-wide">
                             Folder
                           </span>
                           <span className="text-[12px] text-cc-fg font-medium">
                             {group.label}
                           </span>
-                          <span className="text-[9px] rounded px-1.5 py-0.5 bg-cc-hover text-cc-fg/90">
+                          <span className="text-[9px] rounded px-1.5 py-0.5 bg-cc-active/60 text-cc-fg/80">
                             {group.processes.length} running
                           </span>
                           {uniquePorts.length > 0 && (
-                            <span className="text-[9px] rounded px-1.5 py-0.5 bg-cc-hover text-cc-muted">
+                            <span className="text-[9px] rounded px-1.5 py-0.5 bg-cc-active/60 text-cc-muted">
                               {uniquePorts.length} port{uniquePorts.length === 1 ? "" : "s"}
                             </span>
                           )}
@@ -690,7 +906,7 @@ export function ProcessPanel({ sessionId }: { sessionId: string }) {
                         {uniquePorts.slice(0, 4).map((port) => (
                           <span
                             key={`${group.key}-port-${port}`}
-                            className="text-[9px] rounded px-1 py-0.5 bg-cc-hover text-cc-muted tabular-nums font-mono"
+                            className="text-[9px] rounded px-1 py-0.5 bg-cc-active/60 text-cc-muted tabular-nums font-mono"
                           >
                             :{port}
                           </span>
