@@ -471,17 +471,17 @@ describe("SessionEditorPane", () => {
     // Wait for tree + git status to load
     await waitFor(() => expect(getChangedFilesMock).toHaveBeenCalled());
 
-    // Modified file should have amber color class
+    // Modified file should have the warning color class (theme token)
     const modifiedBtns = await screen.findAllByText("modified.ts");
-    expect(modifiedBtns[0].className).toContain("text-amber-400");
+    expect(modifiedBtns[0].className).toContain("text-cc-warning");
 
-    // New/added file should have green color class
+    // New/added file should have the success color class (theme token)
     const addedBtns = await screen.findAllByText("new-file.ts");
-    expect(addedBtns[0].className).toContain("text-green-400");
+    expect(addedBtns[0].className).toContain("text-cc-success");
 
     // Clean file should NOT have git color classes
     const cleanBtns = await screen.findAllByText("clean.ts");
-    expect(cleanBtns[0].className).not.toContain("text-amber-400");
-    expect(cleanBtns[0].className).not.toContain("text-green-400");
+    expect(cleanBtns[0].className).not.toContain("text-cc-warning");
+    expect(cleanBtns[0].className).not.toContain("text-cc-success");
   });
 });

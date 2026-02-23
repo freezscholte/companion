@@ -113,13 +113,13 @@ function flattenTree(nodes: TreeNode[], cwd: string): { path: string; relPath: s
   return results;
 }
 
-/** Map git status code to a text color class. */
+/** Map git status code to a text color class using the app's theme tokens. */
 function gitStatusColor(status: string | undefined): string {
   if (!status) return "";
   switch (status) {
-    case "M": return "text-amber-400";
-    case "A": return "text-green-400";
-    case "D": return "text-red-400 line-through";
+    case "M": return "text-cc-warning";
+    case "A": return "text-cc-success";
+    case "D": return "text-cc-error line-through";
     default: return "";
   }
 }
@@ -144,7 +144,7 @@ function TreeEntry({ node, depth, cwd, selectedPath, onSelect, gitStatus }: Tree
           type="button"
           onClick={() => setOpen((v) => !v)}
           className={`w-full flex items-center gap-1.5 py-1.5 pr-2 text-left text-xs hover:text-cc-fg hover:bg-cc-hover rounded cursor-pointer ${
-            dirHasChanges ? "text-amber-400/70" : "text-cc-muted"
+            dirHasChanges ? "text-cc-warning/70" : "text-cc-muted"
           }`}
           style={{ paddingLeft: `${8 + depth * 12}px` }}
           aria-label={`Toggle ${relPath(cwd, node.path)}`}
