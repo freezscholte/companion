@@ -809,6 +809,27 @@ function handleParsedMessage(
               timestamp: Date.now(),
             });
           }
+          // Track cost/turns from history result, same as the live result handler
+          const resultUpdates: Partial<{ total_cost_usd: number; num_turns: number; context_used_percent: number; total_lines_added: number; total_lines_removed: number }> = {
+            total_cost_usd: r.total_cost_usd,
+            num_turns: r.num_turns,
+          };
+          if (typeof r.total_lines_added === "number") {
+            resultUpdates.total_lines_added = r.total_lines_added;
+          }
+          if (typeof r.total_lines_removed === "number") {
+            resultUpdates.total_lines_removed = r.total_lines_removed;
+          }
+          if (r.modelUsage) {
+            for (const usage of Object.values(r.modelUsage)) {
+              if ((usage as { contextWindow: number; inputTokens: number; outputTokens: number }).contextWindow > 0) {
+                const u = usage as { contextWindow: number; inputTokens: number; outputTokens: number };
+                const pct = Math.round(((u.inputTokens + u.outputTokens) / u.contextWindow) * 100);
+                resultUpdates.context_used_percent = Math.max(0, Math.min(pct, 100));
+              }
+            }
+          }
+          store.updateSession(sessionId, resultUpdates);
         } else if (histMsg.type === "system_event") {
           const summary = summarizeSystemEvent(histMsg.event);
           if (!summary) continue;
@@ -844,6 +865,18 @@ function handleParsedMessage(
           merged.sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
           store.setMessages(sessionId, merged);
         }
+      }
+      // Fix: if the last history message is a `result`, the session's last turn
+      // is complete. Clear any stale streaming state that event_replay might not
+      // correct (e.g. when `result` was pruned from the 600-event buffer).
+      const lastHistMsg = data.messages[data.messages.length - 1];
+      if (lastHistMsg?.type === "result") {
+        clearStreamingDraftMessage(sessionId);
+        store.setStreaming(sessionId, null);
+        streamingPhaseBySession.delete(sessionId);
+        store.setStreamingStats(sessionId, null);
+        store.clearToolProgress(sessionId);
+        store.setSessionStatus(sessionId, "idle");
       }
       break;
     }

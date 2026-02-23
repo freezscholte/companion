@@ -30,6 +30,7 @@ interface MockStoreState {
   darkMode: boolean;
   sessions: Map<string, { cwd?: string }>;
   sdkSessions: { sessionId: string; cwd?: string }[];
+  changedFilesTick: Map<string, number>;
 }
 
 let storeState: MockStoreState;
@@ -39,6 +40,7 @@ function resetStore(overrides: Partial<MockStoreState> = {}) {
     darkMode: false,
     sessions: new Map([["s1", { cwd: "/repo" }]]),
     sdkSessions: [],
+    changedFilesTick: new Map(),
     ...overrides,
   };
 }
@@ -156,6 +158,79 @@ describe("SessionEditorPane", () => {
 
     await waitFor(() => expect(getFileBlobMock).toHaveBeenCalled());
     expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+  });
+
+  it("has a refresh button that reloads the file tree", async () => {
+    // Manual refresh button re-fetches the tree from the server
+    getFileTreeMock.mockResolvedValue({
+      path: "/repo",
+      tree: [{ name: "a.ts", path: "/repo/a.ts", type: "file" }],
+    });
+    render(<SessionEditorPane sessionId="s1" />);
+
+    await waitFor(() => expect(getFileTreeMock).toHaveBeenCalledTimes(1));
+
+    // Now the tree has been loaded; simulate a new file appearing on disk
+    getFileTreeMock.mockResolvedValue({
+      path: "/repo",
+      tree: [
+        { name: "a.ts", path: "/repo/a.ts", type: "file" },
+        { name: "b.ts", path: "/repo/b.ts", type: "file" },
+      ],
+    });
+
+    // Click the refresh button (appears twice: desktop + mobile)
+    const refreshBtns = screen.getAllByLabelText("Refresh file tree");
+    fireEvent.click(refreshBtns[0]);
+
+    await waitFor(() => expect(getFileTreeMock).toHaveBeenCalledTimes(2));
+    const fileButtons = await screen.findAllByText("b.ts");
+    expect(fileButtons.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("auto-refreshes tree when changedFilesTick increments", async () => {
+    // When Claude edits files, changedFilesTick bumps and the tree should reload
+    getFileTreeMock.mockResolvedValue({
+      path: "/repo",
+      tree: [{ name: "a.ts", path: "/repo/a.ts", type: "file" }],
+    });
+    const { rerender } = render(<SessionEditorPane sessionId="s1" />);
+
+    await waitFor(() => expect(getFileTreeMock).toHaveBeenCalledTimes(1));
+
+    // Simulate changedFilesTick bump (Claude edited a file)
+    getFileTreeMock.mockResolvedValue({
+      path: "/repo",
+      tree: [
+        { name: "a.ts", path: "/repo/a.ts", type: "file" },
+        { name: "new-file.ts", path: "/repo/new-file.ts", type: "file" },
+      ],
+    });
+    storeState = { ...storeState, changedFilesTick: new Map([["s1", 1]]) };
+    rerender(<SessionEditorPane sessionId="s1" />);
+
+    await waitFor(() => expect(getFileTreeMock).toHaveBeenCalledTimes(2));
+  });
+
+  it("auto-refreshes open file content when changedFilesTick increments", async () => {
+    // When an open file is modified by Claude, its content should update
+    getFileTreeMock.mockResolvedValue({
+      path: "/repo",
+      tree: [{ name: "a.ts", path: "/repo/a.ts", type: "file" }],
+    });
+    readFileMock.mockResolvedValue({ path: "/repo/a.ts", content: "original\n" });
+
+    const { rerender } = render(<SessionEditorPane sessionId="s1" />);
+    await clickFile("a.ts");
+    await waitFor(() => expect(readFileMock).toHaveBeenCalledTimes(1));
+
+    // Claude modifies the file
+    readFileMock.mockResolvedValue({ path: "/repo/a.ts", content: "updated by claude\n" });
+    storeState = { ...storeState, changedFilesTick: new Map([["s1", 1]]) };
+    rerender(<SessionEditorPane sessionId="s1" />);
+
+    // File content should be re-fetched
+    await waitFor(() => expect(readFileMock).toHaveBeenCalledTimes(2));
   });
 
   it("has mobile back button for navigation", async () => {

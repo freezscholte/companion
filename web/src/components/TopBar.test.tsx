@@ -8,10 +8,15 @@ vi.mock("../api.js", () => ({
   },
 }));
 
+vi.mock("../ws.js", () => ({
+  sendToSession: vi.fn(),
+}));
+
 interface MockStoreState {
   currentSessionId: string | null;
   cliConnected: Map<string, boolean>;
   sessionStatus: Map<string, "idle" | "running" | "compacting" | null>;
+  sessionNames: Map<string, string>;
   sidebarOpen: boolean;
   setSidebarOpen: ReturnType<typeof vi.fn>;
   taskPanelOpen: boolean;
@@ -24,7 +29,7 @@ interface MockStoreState {
   openQuickTerminal: ReturnType<typeof vi.fn>;
   resetQuickTerminal: ReturnType<typeof vi.fn>;
   sessions: Map<string, { cwd?: string; is_containerized?: boolean }>;
-  sdkSessions: { sessionId: string; cwd?: string; containerId?: string }[];
+  sdkSessions: { sessionId: string; cwd?: string; containerId?: string; model?: string; backendType?: string }[];
   gitChangedFilesCount: Map<string, number>;
   sessionProcesses: Map<string, { status: string }[]>;
 }
@@ -36,6 +41,7 @@ function resetStore(overrides: Partial<MockStoreState> = {}) {
     currentSessionId: "s1",
     cliConnected: new Map([["s1", true]]),
     sessionStatus: new Map([["s1", "idle"]]),
+    sessionNames: new Map(),
     sidebarOpen: true,
     setSidebarOpen: vi.fn(),
     taskPanelOpen: false,
@@ -56,7 +62,12 @@ function resetStore(overrides: Partial<MockStoreState> = {}) {
 }
 
 vi.mock("../store.js", () => ({
-  useStore: (selector: (s: MockStoreState) => unknown) => selector(storeState),
+  useStore: Object.assign(
+    (selector: (s: MockStoreState) => unknown) => selector(storeState),
+    {
+      getState: () => ({ ...storeState, setSdkSessions: vi.fn() }),
+    },
+  ),
 }));
 
 import { TopBar } from "./TopBar.js";

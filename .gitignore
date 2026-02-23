@@ -11,4 +11,6 @@ web/dist/
 web/.env.local
 .dev-*.pid
 .dev-*.log
-web/dev-dist/
+docs/mocks/
+docs/repo-only/
+

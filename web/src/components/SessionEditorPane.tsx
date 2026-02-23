@@ -159,6 +159,8 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
     || s.sdkSessions.find((sdk) => sdk.sessionId === sessionId)?.cwd
     || null,
   );
+  // Bumped when Claude edits a file — triggers tree + open file refresh
+  const changedFilesTick = useStore((s) => s.changedFilesTick.get(sessionId) ?? 0);
   const [tree, setTree] = useState<TreeNode[]>([]);
   const [loadingTree, setLoadingTree] = useState(true);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -192,6 +194,14 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
     return exts;
   }, [selectedPath]);
 
+  // A counter we can bump to force a tree + file re-fetch (manual refresh button)
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const refreshTree = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+  }, []);
+
+  // Load file tree when cwd changes, when Claude edits files, or on manual refresh
   useEffect(() => {
     if (!cwd) {
       setLoadingTree(false);
@@ -214,7 +224,28 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
     return () => {
       cancelled = true;
     };
-  }, [cwd]);
+  }, [cwd, changedFilesTick, refreshKey]);
+
+  // Re-fetch the currently open file when Claude edits files (changedFilesTick bumps).
+  // Uses refs so the effect only depends on changedFilesTick itself.
+  const selectedPathRef = useRef<string | null>(null);
+  const dirtyRef = useRef(false);
+  useEffect(() => { selectedPathRef.current = selectedPath; }, [selectedPath]);
+  useEffect(() => { dirtyRef.current = dirty; }, [dirty]);
+
+  useEffect(() => {
+    if (changedFilesTick === 0) return;
+    const path = selectedPathRef.current;
+    if (!path || isImageFile(path)) return;
+    if (dirtyRef.current) return; // don't overwrite unsaved user edits
+    let cancelled = false;
+    api.readFile(path).then((res) => {
+      if (cancelled) return;
+      setContent(res.content);
+      setOriginalContent(res.content);
+    }).catch(() => { /* file may have been deleted */ });
+    return () => { cancelled = true; };
+  }, [changedFilesTick]);
 
   // Load file content (or image blob) when a file is selected
   useEffect(() => {
@@ -314,7 +345,21 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
   // ── Tree panel (reused in both desktop sidebar and mobile master view) ──
   const treePanel = (
     <div className="flex-1 min-h-0 flex flex-col">
-      <div className="shrink-0 px-3 py-2 border-b border-cc-border text-xs text-cc-muted font-medium">Files</div>
+      <div className="shrink-0 px-3 py-2 border-b border-cc-border flex items-center justify-between">
+        <span className="text-xs text-cc-muted font-medium">Files</span>
+        <button
+          type="button"
+          onClick={refreshTree}
+          disabled={loadingTree}
+          className="flex items-center justify-center w-6 h-6 rounded text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          aria-label="Refresh file tree"
+          title="Refresh file tree"
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 ${loadingTree ? "animate-spin" : ""}`}>
+            <path d="M13.65 2.35a1 1 0 0 0-1.3 0L11 3.7A5.99 5.99 0 0 0 2 8a1 1 0 1 0 2 0 4 4 0 0 1 6.29-3.29L8.65 6.35a1 1 0 0 0 .7 1.7H13a1 1 0 0 0 1-1V3.4a1 1 0 0 0-.35-.7z M14 8a1 1 0 1 0-2 0 4 4 0 0 1-6.29 3.29l1.64-1.64a1 1 0 0 0-.7-1.7H3.05a1 1 0 0 0-1 1v3.65a1 1 0 0 0 1.7.7L5 11.7A5.99 5.99 0 0 0 14 8z" />
+          </svg>
+        </button>
+      </div>
       <div className="flex-1 min-h-0 overflow-auto p-1.5">
         {loadingTree && <div className="px-2 py-2 text-xs text-cc-muted">Loading files...</div>}
         {!loadingTree && tree.length === 0 && !error && (
