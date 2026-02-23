@@ -1007,6 +1007,22 @@ export function createRoutes(
     "ControlCenter", "Finder", "loginwindow", "SystemUIServer",
   ]);
 
+  function parseLsofCwd(raw: string): string | undefined {
+    // `lsof -Fn` emits records like:
+    // p1234\nfcwd\nn/Users/me/project\n
+    const match = raw.match(/^n(.+)$/m);
+    const cwd = match?.[1]?.trim();
+    return cwd || undefined;
+  }
+
+  function parsePsStartTime(raw: string): number | undefined {
+    const text = raw.trim();
+    if (!text) return undefined;
+    const ts = Date.parse(text);
+    if (!Number.isFinite(ts)) return undefined;
+    return ts;
+  }
+
   api.get("/sessions/:id/processes/system", async (c) => {
     const sessionId = c.req.param("id");
     const session = launcher.getSession(sessionId);
@@ -1036,12 +1052,12 @@ export function createRoutes(
         if (parts.length < 9) continue;
         const command = parts[0];
         const pid = parseInt(parts[1], 10);
-        const name = parts[parts.length - 1]; // e.g., "*:3000" or "127.0.0.1:8080"
-
         if (isNaN(pid)) continue;
         if (EXCLUDE_COMMANDS.has(command)) continue;
 
-        const portMatch = name.match(/:(\d+)\s*$/);
+        // macOS lsof NAME ends like `TCP *:3000 (LISTEN)`, so the final token is
+        // often `(LISTEN)` rather than the address. Parse from the full line.
+        const portMatch = line.match(/:(\d+)\s+\(LISTEN\)\s*$/) ?? line.match(/:(\d+)\s*$/);
         if (!portMatch) continue;
         const port = parseInt(portMatch[1], 10);
 
@@ -1054,7 +1070,14 @@ export function createRoutes(
       }
 
       // Get full command line for each PID
-      const processes: { pid: number; command: string; fullCommand: string; ports: number[] }[] = [];
+      const processes: {
+        pid: number;
+        command: string;
+        fullCommand: string;
+        ports: number[];
+        cwd?: string;
+        startedAt?: number;
+      }[] = [];
 
       for (const [pid, info] of pidMap) {
         // Skip if command isn't dev-related (check both exact name and prefix)
@@ -1066,6 +1089,8 @@ export function createRoutes(
         if (!isDev) continue;
 
         let fullCommand = info.command;
+        let cwd: string | undefined;
+        let startedAt: number | undefined;
         try {
           if (session.containerId) {
             fullCommand = containerManager.execInContainer(
@@ -1083,11 +1108,51 @@ export function createRoutes(
           // Fall back to short command name
         }
 
+        try {
+          if (session.containerId) {
+            const cwdRaw = containerManager.execInContainer(
+              session.containerId,
+              ["sh", "-c", `readlink /proc/${pid}/cwd 2>/dev/null || true`],
+              2_000,
+            ).trim();
+            cwd = cwdRaw || undefined;
+          } else {
+            const cwdRaw = execSync(`lsof -a -p ${pid} -d cwd -Fn 2>/dev/null || true`, {
+              timeout: 2_000,
+              encoding: "utf-8",
+            });
+            cwd = parseLsofCwd(cwdRaw);
+          }
+        } catch {
+          // Best-effort only
+        }
+
+        try {
+          if (session.containerId) {
+            const startRaw = containerManager.execInContainer(
+              session.containerId,
+              ["sh", "-c", `ps -p ${pid} -o lstart= 2>/dev/null || true`],
+              2_000,
+            );
+            startedAt = parsePsStartTime(startRaw);
+          } else {
+            const startRaw = execSync(`ps -p ${pid} -o lstart= 2>/dev/null || true`, {
+              timeout: 2_000,
+              encoding: "utf-8",
+            });
+            startedAt = parsePsStartTime(startRaw);
+          }
+        } catch {
+          // Best-effort only
+        }
+
         processes.push({
           pid,
           command: info.command,
           fullCommand: fullCommand || info.command,
           ports: [...info.ports].sort((a, b) => a - b),
+          cwd,
+          startedAt,
         });
       }
 

@@ -926,7 +926,7 @@ export const api = {
 
   // System dev process scanning
   getSystemProcesses: (sessionId: string) =>
-    get<{ ok: boolean; processes: { pid: number; command: string; fullCommand: string; ports: number[] }[] }>(
+    get<{ ok: boolean; processes: { pid: number; command: string; fullCommand: string; ports: number[]; cwd?: string; startedAt?: number }[] }>(
       `/sessions/${encodeURIComponent(sessionId)}/processes/system`,
     ),
   killSystemProcess: (sessionId: string, pid: number) =>

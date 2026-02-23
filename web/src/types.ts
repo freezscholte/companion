@@ -67,6 +67,10 @@ export interface SystemProcess {
   fullCommand: string;
   /** TCP ports this process is listening on */
   ports: number[];
+  /** Process working directory, when available */
+  cwd?: string;
+  /** Best-effort process start timestamp (ms since epoch) */
+  startedAt?: number;
 }
 
 export interface SdkSessionInfo {

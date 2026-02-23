@@ -1145,6 +1145,75 @@ describe("POST /api/sessions/:id/relaunch", () => {
   });
 });
 
+describe("GET /api/sessions/:id/processes/system", () => {
+  it("parses macOS lsof LISTEN lines and returns dev servers", async () => {
+    launcher.getSession.mockReturnValue({
+      sessionId: "s1",
+      cwd: "/repo",
+      state: "running",
+    });
+
+    vi.mocked(execSync)
+      .mockReturnValueOnce(
+        [
+          "COMMAND   PID USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME",
+          "node    12345 test   20u  IPv6 0x123456789      0t0  TCP *:3000 (LISTEN)",
+        ].join("\n"),
+      )
+      .mockReturnValueOnce("node /repo/node_modules/vite/bin/vite.js --port 3000\n");
+
+    const res = await app.request("/api/sessions/s1/processes/system", { method: "GET" });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({
+      ok: true,
+      processes: [
+        {
+          pid: 12345,
+          command: "node",
+          fullCommand: "node /repo/node_modules/vite/bin/vite.js --port 3000",
+          ports: [3000],
+        },
+      ],
+    });
+  });
+
+  it("includes process cwd and best-effort start time when available", async () => {
+    launcher.getSession.mockReturnValue({
+      sessionId: "s1",
+      cwd: "/repo",
+      state: "running",
+    });
+
+    vi.mocked(execSync)
+      .mockReturnValueOnce(
+        [
+          "COMMAND   PID USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME",
+          "bun     43210 test   20u  IPv4 0x123456789      0t0  TCP *:3457 (LISTEN)",
+        ].join("\n"),
+      )
+      .mockReturnValueOnce("bun run dev\n")
+      .mockReturnValueOnce("p43210\nfcwd\nn/Users/test/project\n")
+      .mockReturnValueOnce("Mon Feb 23 10:00:00 2026\n");
+
+    const res = await app.request("/api/sessions/s1/processes/system", { method: "GET" });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.ok).toBe(true);
+    expect(json.processes).toHaveLength(1);
+    expect(json.processes[0]).toMatchObject({
+      pid: 43210,
+      command: "bun",
+      fullCommand: "bun run dev",
+      cwd: "/Users/test/project",
+      ports: [3457],
+    });
+    expect(typeof json.processes[0].startedAt).toBe("number");
+  });
+});
+
 describe("DELETE /api/sessions/:id", () => {
   it("kills, removes, and closes session", async () => {
     const res = await app.request("/api/sessions/s1", { method: "DELETE" });

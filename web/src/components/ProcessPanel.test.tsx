@@ -20,6 +20,7 @@ vi.mock("../api.js", () => ({
 
 // ---- Mock Store ----
 interface MockStoreState {
+  sessions: Map<string, { cwd: string; repo_root?: string }>;
   sessionProcesses: Map<string, ProcessItem[]>;
   updateProcess: ReturnType<typeof vi.fn>;
 }
@@ -51,6 +52,7 @@ let mockState: MockStoreState;
 
 function resetStore(overrides: Partial<MockStoreState> = {}) {
   mockState = {
+    sessions: new Map(),
     sessionProcesses: new Map(),
     updateProcess: vi.fn(),
     ...overrides,
@@ -238,9 +240,92 @@ describe("ProcessPanel system processes", () => {
 
     await waitFor(() => {
       expect(screen.getByText("bun")).toBeInTheDocument();
-      expect(screen.getByText(":3000")).toBeInTheDocument();
+      expect(screen.getByText("localhost:3000")).toBeInTheDocument();
       expect(screen.getByText("PID: 5555")).toBeInTheDocument();
     });
+  });
+
+  it("shows a readable app label inferred from the full command", async () => {
+    // The UI should infer a clearer app name than just "node" when possible.
+    mockGetSystemProcesses.mockResolvedValue({
+      ok: true,
+      processes: [
+        makeSystemProcess({
+          command: "node",
+          fullCommand: "node /repo/web/node_modules/vite/bin/vite.js --port 3000",
+          ports: [3000],
+        }),
+      ],
+    });
+    render(<ProcessPanel sessionId="s1" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Vite dev server")).toBeInTheDocument();
+      expect(screen.getByText("node")).toBeInTheDocument();
+    });
+  });
+
+  it("groups system processes by project folder and marks current repo", async () => {
+    resetStore({
+      sessions: new Map([["s1", { cwd: "/repo/app", repo_root: "/repo/app" }]]),
+    });
+    mockGetSystemProcesses.mockResolvedValue({
+      ok: true,
+      processes: [
+        makeSystemProcess({
+          pid: 101,
+          command: "node",
+          fullCommand: "node /repo/app/node_modules/.bin/vite",
+          cwd: "/repo/app",
+          ports: [3000],
+          startedAt: Date.now() - 65_000,
+        }),
+        makeSystemProcess({
+          pid: 202,
+          command: "bun",
+          fullCommand: "bun run --hot src/index.ts",
+          cwd: "/repo/worker",
+          ports: [3001],
+        }),
+      ],
+    });
+
+    render(<ProcessPanel sessionId="s1" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Toggle process group app" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Toggle process group worker" })).toBeInTheDocument();
+      expect(screen.getByText("Current repo")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Open http://localhost:3000" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Open http://localhost:3001" })).toBeInTheDocument();
+      expect(screen.getByText(/Started /)).toBeInTheDocument();
+      expect(screen.getByText(/Up /)).toBeInTheDocument();
+    });
+  });
+
+  it("collapses a project group when its header is clicked", async () => {
+    mockGetSystemProcesses.mockResolvedValue({
+      ok: true,
+      processes: [
+        makeSystemProcess({
+          pid: 303,
+          command: "node",
+          fullCommand: "node /repo/app/node_modules/.bin/vite",
+          cwd: "/repo/app",
+          ports: [3002],
+        }),
+      ],
+    });
+    render(<ProcessPanel sessionId="s1" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Toggle process group app" })).toBeInTheDocument();
+      expect(screen.getByText("localhost:3002")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle process group app" }));
+
+    expect(screen.queryByText("localhost:3002")).not.toBeInTheDocument();
   });
 
   it("shows 'Dev Servers' section header when system processes exist", async () => {
@@ -320,10 +405,10 @@ describe("ProcessPanel system processes", () => {
     render(<ProcessPanel sessionId="s1" />);
 
     await waitFor(() => {
-      expect(screen.getByText("node")).toBeInTheDocument();
+      expect(screen.getByText("server.js")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText("node"));
+    fireEvent.click(screen.getByText("server.js"));
     expect(screen.getByText("node ./server.js --port 3000 --verbose")).toBeInTheDocument();
   });
 

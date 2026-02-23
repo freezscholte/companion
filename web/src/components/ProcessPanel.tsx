@@ -23,6 +23,157 @@ function truncateCommand(cmd: string, max = 60): string {
   return first.slice(0, max - 3) + "...";
 }
 
+function pathBasename(path: string): string {
+  const cleaned = path.replace(/\/+$/, "");
+  const parts = cleaned.split("/").filter(Boolean);
+  return parts[parts.length - 1] || cleaned || "/";
+}
+
+function pathDirname(path: string): string {
+  const cleaned = path.replace(/\/+$/, "");
+  const idx = cleaned.lastIndexOf("/");
+  if (idx <= 0) return "/";
+  return cleaned.slice(0, idx);
+}
+
+function normalizePath(path?: string): string | undefined {
+  if (!path) return undefined;
+  const trimmed = path.trim();
+  if (!trimmed) return undefined;
+  return trimmed.replace(/\/+$/, "") || "/";
+}
+
+function isPathInside(path?: string, parent?: string): boolean {
+  const a = normalizePath(path);
+  const b = normalizePath(parent);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return a.startsWith(`${b}/`);
+}
+
+function compactPath(path: string, max = 68): string {
+  if (path.length <= max) return path;
+  const parts = path.split("/").filter(Boolean);
+  if (parts.length <= 2) return `...${path.slice(-(max - 3))}`;
+  const tail = parts.slice(-2).join("/");
+  const prefix = path.startsWith("/") ? "/" : "";
+  const candidate = `${prefix}.../${tail}`;
+  if (candidate.length <= max) return candidate;
+  return `...${path.slice(-(max - 3))}`;
+}
+
+function extractProjectPathFromCommand(fullCommand: string): string | undefined {
+  const candidates = [...fullCommand.matchAll(/\/[^\s"'`]+/g)].map((m) => m[0]);
+  if (candidates.length === 0) return undefined;
+
+  let best: { path: string; score: number } | null = null;
+  for (const raw of candidates) {
+    let candidate = raw;
+    let score = 0;
+
+    const nodeModulesIdx = candidate.indexOf("/node_modules/");
+    if (nodeModulesIdx > 0) {
+      candidate = candidate.slice(0, nodeModulesIdx);
+      score += 4;
+    }
+
+    if (/\/\.[^/]+/.test(candidate)) {
+      score -= 1;
+    }
+    if (/\/\.nvm\//.test(raw) || /\/bin\/(?:node|bun|python3?|ruby|php)$/.test(raw)) {
+      score -= 3;
+    }
+    if (/\.(mjs|cjs|js|ts|tsx|py|rb|php|go)$/i.test(candidate)) {
+      candidate = pathDirname(candidate);
+      score += 2;
+    }
+    if (/\/Users\/|\/home\/|\/workspace\//.test(candidate)) {
+      score += 1;
+    }
+
+    const normalized = normalizePath(candidate);
+    if (!normalized) continue;
+    if (!best || score > best.score || (score === best.score && normalized.length > best.path.length)) {
+      best = { path: normalized, score };
+    }
+  }
+
+  return best?.path;
+}
+
+function formatStartTime(ts: number): string {
+  try {
+    return new Date(ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+}
+
+interface SystemProcessGroup {
+  key: string;
+  label: string;
+  path?: string;
+  isCurrentRepo: boolean;
+  processes: SystemProcess[];
+}
+
+function groupSystemProcesses(systemProcesses: SystemProcess[], currentRepoPath?: string): SystemProcessGroup[] {
+  const groups = new Map<string, SystemProcessGroup>();
+
+  for (const proc of systemProcesses) {
+    const projectPath = normalizePath(proc.cwd) || extractProjectPathFromCommand(proc.fullCommand);
+    const isCurrentRepo = isPathInside(projectPath, currentRepoPath);
+    const key = projectPath || "__unknown__";
+    const existing = groups.get(key);
+
+    if (existing) {
+      existing.processes.push(proc);
+      existing.isCurrentRepo = existing.isCurrentRepo || isCurrentRepo;
+      continue;
+    }
+
+    const label = projectPath ? pathBasename(projectPath) : "Unknown project";
+    groups.set(key, {
+      key,
+      label,
+      path: projectPath,
+      isCurrentRepo,
+      processes: [proc],
+    });
+  }
+
+  return [...groups.values()].sort((a, b) => {
+    if (a.isCurrentRepo !== b.isCurrentRepo) return a.isCurrentRepo ? -1 : 1;
+    if (!!a.path !== !!b.path) return a.path ? -1 : 1;
+    return (a.path || a.label).localeCompare(b.path || b.label);
+  });
+}
+
+function inferSystemProcessTitle(proc: SystemProcess): string {
+  const full = (proc.fullCommand || proc.command || "").trim();
+  const lower = full.toLowerCase();
+
+  if (/\bnext(\s+dev|\b)/.test(lower) || lower.includes("/next/dist/bin/next")) return "Next.js dev server";
+  if (/\bvite\b/.test(lower)) return "Vite dev server";
+  if (/\bnuxt\b/.test(lower)) return "Nuxt dev server";
+  if (/\bastro\b/.test(lower)) return "Astro dev server";
+  if (/\bremix\b/.test(lower)) return "Remix dev server";
+  if (/\bwebpack(-dev-server)?\b/.test(lower)) return "Webpack dev server";
+  if (/\bphp\s+artisan\s+serve\b/.test(lower)) return "Laravel dev server";
+  if (/\buvicorn\b/.test(lower)) return "Uvicorn server";
+  if (/\bgunicorn\b/.test(lower)) return "Gunicorn server";
+  if (/\bpython(?:3)?\s+-m\s+http\.server\b/.test(lower)) return "Python http.server";
+  if (/\b(?:bin\/rails|rails\s+server|puma)\b/.test(lower)) return "Rails app server";
+
+  const scriptMatch = full.match(/(?:^|\s)([^\s"'`]+\.(?:mjs|cjs|js|ts|tsx|py|rb|php|go))(?=\s|$)/i);
+  if (scriptMatch) {
+    const filename = scriptMatch[1].split("/").pop();
+    if (filename) return filename;
+  }
+
+  return truncateCommand(full || proc.command, 64);
+}
+
 // --- Claude Background Task Row ---
 
 function ProcessRow({
@@ -129,6 +280,18 @@ function SystemProcessRow({
   onKill: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  const title = inferSystemProcessTitle(proc);
+  const commandPreview = truncateCommand(proc.fullCommand, 110);
+  const showCommandPreview = commandPreview && commandPreview !== title;
+  const uptime = proc.startedAt ? formatDuration(Math.max(0, now - proc.startedAt)) : null;
+  const startedLabel = proc.startedAt ? formatStartTime(proc.startedAt) : null;
+
+  useEffect(() => {
+    if (!proc.startedAt) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [proc.startedAt]);
 
   return (
     <div
@@ -147,23 +310,36 @@ function SystemProcessRow({
               className="text-[12px] text-cc-fg font-medium truncate text-left cursor-pointer hover:underline flex-1 min-w-0"
               title={proc.fullCommand}
             >
-              {proc.command}
+              {title}
             </button>
-            <div className="flex items-center gap-1 shrink-0">
-              {proc.ports.map((port) => (
-                <span
-                  key={port}
-                  className="text-[9px] rounded px-1 py-0.5 bg-cc-hover text-cc-muted tabular-nums font-mono"
-                >
-                  :{port}
-                </span>
-              ))}
-            </div>
           </div>
 
-          <div className="text-[10px] text-cc-muted mt-0.5">
-            PID: {proc.pid}
+          <div className="mt-0.5 flex items-center gap-1.5 flex-wrap text-[10px] text-cc-muted">
+            <span className="rounded px-1 py-0.5 bg-cc-hover text-[9px] font-mono text-cc-fg/80">
+              {proc.command}
+            </span>
+            <span>PID: {proc.pid}</span>
+            {uptime && <span>Up {uptime}</span>}
+            {startedLabel && <span>Started {startedLabel}</span>}
+            {proc.ports.map((port) => (
+              <a
+                key={port}
+                href={`http://localhost:${port}`}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Open http://localhost:${port}`}
+                className="text-[9px] rounded px-1 py-0.5 bg-cc-hover text-cc-muted tabular-nums font-mono"
+              >
+                localhost:{port}
+              </a>
+            ))}
           </div>
+
+          {showCommandPreview && !expanded && (
+            <div className="mt-1 text-[10px] text-cc-muted font-mono truncate" title={proc.fullCommand}>
+              {commandPreview}
+            </div>
+          )}
 
           {expanded && (
             <pre className="mt-1.5 text-[10px] text-cc-muted bg-cc-hover rounded px-2 py-1 overflow-x-auto whitespace-pre-wrap break-all font-mono">
@@ -203,15 +379,19 @@ function SectionHeader({ title, count, action }: { title: string; count?: number
 // --- Main Panel ---
 
 export function ProcessPanel({ sessionId }: { sessionId: string }) {
+  const session = useStore((s) => s.sessions.get(sessionId));
   const processes = useStore((s) => s.sessionProcesses.get(sessionId)) || EMPTY_PROCESSES;
   const [killing, setKilling] = useState<Set<string>>(new Set());
   const [systemProcesses, setSystemProcesses] = useState<SystemProcess[]>([]);
   const [killingPids, setKillingPids] = useState<Set<number>>(new Set());
+  const [collapsedSystemGroups, setCollapsedSystemGroups] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
   const cancelledRef = useRef(false);
 
   const runningProcesses = processes.filter((p) => p.status === "running");
   const completedProcesses = processes.filter((p) => p.status !== "running");
+  const currentRepoPath = session?.repo_root || session?.cwd;
+  const systemGroups = groupSystemProcesses(systemProcesses, currentRepoPath);
 
   const fetchSystemProcesses = useCallback(async () => {
     try {
@@ -219,8 +399,8 @@ export function ProcessPanel({ sessionId }: { sessionId: string }) {
       if (!cancelledRef.current && result.processes) {
         setSystemProcesses(result.processes);
       }
-    } catch {
-      // Silently handle — endpoint may not be available
+    } catch (err) {
+      console.warn("[ProcessPanel] System process scan failed:", err instanceof Error ? err.message : err);
     }
   }, [sessionId]);
 
@@ -304,6 +484,15 @@ export function ProcessPanel({ sessionId }: { sessionId: string }) {
     },
     [sessionId],
   );
+
+  const toggleSystemGroup = useCallback((groupKey: string) => {
+    setCollapsedSystemGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      return next;
+    });
+  }, []);
 
   const hasAnything = processes.length > 0 || systemProcesses.length > 0;
 
@@ -397,16 +586,58 @@ export function ProcessPanel({ sessionId }: { sessionId: string }) {
                 </button>
               }
             />
-            <div role="list" aria-label="System dev processes">
-              {systemProcesses.map((proc) => (
-                <SystemProcessRow
-                  key={proc.pid}
-                  proc={proc}
-                  killing={killingPids.has(proc.pid)}
-                  onKill={() => handleKillSystemProcess(proc.pid)}
-                />
-              ))}
-            </div>
+            {systemGroups.map((group) => {
+              const isCollapsed = collapsedSystemGroups.has(group.key);
+              return (
+                <div key={group.key}>
+                  <div className="px-4 py-2 border-b border-cc-border/70 bg-cc-hover/20">
+                    <button
+                      type="button"
+                      onClick={() => toggleSystemGroup(group.key)}
+                      className="w-full flex items-start justify-between gap-3 text-left cursor-pointer"
+                      aria-expanded={!isCollapsed}
+                      aria-label={`Toggle process group ${group.label}`}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[11px] text-cc-fg font-medium">
+                            {isCollapsed ? "▸" : "▾"} {group.label}
+                          </span>
+                          <span className="text-[9px] rounded px-1 py-0.5 bg-cc-hover text-cc-muted">
+                            {group.processes.length} proc{group.processes.length === 1 ? "" : "s"}
+                          </span>
+                          {group.isCurrentRepo && (
+                            <span className="text-[9px] rounded px-1 py-0.5 bg-cc-primary/20 text-cc-primary">
+                              Current repo
+                            </span>
+                          )}
+                        </div>
+                        {group.path && (
+                          <div
+                            className="mt-1 text-[10px] text-cc-muted font-mono truncate"
+                            title={group.path}
+                          >
+                            {compactPath(group.path, 96)}
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  </div>
+                  {!isCollapsed && (
+                    <div role="list" aria-label={`System dev processes for ${group.label}`}>
+                      {group.processes.map((proc) => (
+                        <SystemProcessRow
+                          key={proc.pid}
+                          proc={proc}
+                          killing={killingPids.has(proc.pid)}
+                          onKill={() => handleKillSystemProcess(proc.pid)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </>
         )}
       </div>
