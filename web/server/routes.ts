@@ -985,20 +985,26 @@ export function createRoutes(
     if (!session.pid) return c.json({ error: "Session PID unknown" }, 503);
 
     try {
-      const { execSync } = await import("node:child_process");
+      const { execFileSync } = await import("node:child_process");
       // The taskId appears in the output file path of the background process,
-      // so pkill -f matches it reliably
+      // so pkill -f matches it reliably.
+      // Use execFileSync (array form) to avoid shell injection — taskId is passed
+      // as an argument, never interpolated into a shell string.
       if (session.containerId) {
         containerManager.execInContainer(
           session.containerId,
-          ["sh", "-c", `pkill -f '${taskId}' 2>/dev/null; true`],
+          ["pkill", "-f", taskId],
           5_000,
         );
       } else {
-        execSync(`pkill -f '${taskId}' 2>/dev/null; true`, {
-          timeout: 5_000,
-          encoding: "utf-8",
-        });
+        try {
+          execFileSync("pkill", ["-f", taskId], {
+            timeout: 5_000,
+            encoding: "utf-8",
+          });
+        } catch {
+          // pkill returns non-zero when no processes matched — that's fine
+        }
       }
       return c.json({ ok: true, taskId });
     } catch (e) {
