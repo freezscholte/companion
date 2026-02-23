@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { api } from "../api.js";
 import { useStore } from "../store.js";
 import { getTelemetryPreferenceEnabled, setTelemetryPreferenceEnabled } from "../analytics.js";
@@ -7,6 +7,17 @@ import { navigateToSession, navigateHome } from "../utils/routing.js";
 interface SettingsPageProps {
   embedded?: boolean;
 }
+
+const CATEGORIES = [
+  { id: "general", label: "General" },
+  { id: "notifications", label: "Notifications" },
+  { id: "openrouter", label: "OpenRouter" },
+  { id: "updates", label: "Updates" },
+  { id: "telemetry", label: "Telemetry" },
+  { id: "environments", label: "Environments" },
+] as const;
+
+type CategoryId = (typeof CATEGORIES)[number]["id"];
 
 export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [openrouterApiKey, setOpenrouterApiKey] = useState("");
@@ -35,6 +46,53 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [updateStatus, setUpdateStatus] = useState("");
   const [updateError, setUpdateError] = useState("");
   const [telemetryEnabled, setTelemetryEnabled] = useState(getTelemetryPreferenceEnabled());
+  const [activeSection, setActiveSection] = useState<CategoryId>("general");
+
+  const contentRef = useRef<HTMLDivElement>(null);
+  const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+
+  // IntersectionObserver to track which section is in view
+  useEffect(() => {
+    const container = contentRef.current;
+    if (!container) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        // Find the topmost visible section
+        let topEntry: IntersectionObserverEntry | null = null;
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            if (!topEntry || entry.boundingClientRect.top < topEntry.boundingClientRect.top) {
+              topEntry = entry;
+            }
+          }
+        }
+        if (topEntry?.target?.id) {
+          setActiveSection(topEntry.target.id as CategoryId);
+        }
+      },
+      {
+        root: container,
+        rootMargin: "-10% 0px -70% 0px",
+        threshold: 0,
+      },
+    );
+
+    for (const cat of CATEGORIES) {
+      const el = sectionRefs.current[cat.id];
+      if (el) observer.observe(el);
+    }
+
+    return () => observer.disconnect();
+  }, [loading]); // re-attach after loading completes and sections render
+
+  const scrollToSection = useCallback((id: CategoryId) => {
+    setActiveSection(id);
+    const el = sectionRefs.current[id];
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, []);
 
   useEffect(() => {
     api
@@ -111,9 +169,14 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
     }
   }
 
+  const setSectionRef = useCallback((id: string) => (el: HTMLElement | null) => {
+    sectionRefs.current[id] = el;
+  }, []);
+
   return (
-    <div className={`${embedded ? "h-full" : "h-[100dvh]"} bg-cc-bg text-cc-fg font-sans-ui antialiased overflow-y-auto`}>
-      <div className="max-w-5xl mx-auto px-4 sm:px-8 py-6 sm:py-10 pb-safe">
+    <div className={`${embedded ? "h-full" : "h-[100dvh]"} bg-cc-bg text-cc-fg font-sans-ui antialiased flex flex-col`}>
+      {/* Header */}
+      <div className="shrink-0 max-w-5xl w-full mx-auto px-4 sm:px-8 pt-6 sm:pt-10">
         <div className="flex items-start justify-between gap-3 mb-6">
           <div>
             <h1 className="text-xl font-semibold text-cc-fg">Settings</h1>
@@ -137,242 +200,304 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
             </button>
           )}
         </div>
+      </div>
 
-        <form
-          onSubmit={onSave}
-          className="bg-cc-card border border-cc-border rounded-xl p-4 sm:p-5 space-y-4"
+      {/* Mobile horizontal nav */}
+      <div className="sm:hidden shrink-0 border-b border-cc-border">
+        <nav
+          className="flex gap-1 px-4 py-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          aria-label="Settings categories"
         >
-          <h2 className="text-sm font-semibold text-cc-fg">OpenRouter</h2>
-          <div>
-            <label className="block text-sm font-medium mb-1.5" htmlFor="openrouter-key">
-              OpenRouter API Key
-            </label>
-            <input
-              id="openrouter-key"
-              type="password"
-              value={openrouterApiKey}
-              onChange={(e) => setOpenrouterApiKey(e.target.value)}
-              placeholder={configured ? "Configured. Enter a new key to replace." : "sk-or-v1-..."}
-              className="w-full px-3 py-2.5 text-sm bg-cc-input-bg border border-cc-border rounded-lg text-cc-fg placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/60"
-            />
-            <p className="mt-1.5 text-xs text-cc-muted">
-              Auto-renaming is disabled until this key is configured.
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1.5" htmlFor="openrouter-model">
-              OpenRouter Model
-            </label>
-            <input
-              id="openrouter-model"
-              type="text"
-              value={openrouterModel}
-              onChange={(e) => setOpenrouterModel(e.target.value)}
-              placeholder="openrouter/free"
-              className="w-full px-3 py-2.5 text-sm bg-cc-input-bg border border-cc-border rounded-lg text-cc-fg placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/60"
-            />
-          </div>
-
-          <div className="pt-1">
+          {CATEGORIES.map((cat) => (
             <button
+              key={cat.id}
               type="button"
-              onClick={() => setEditorTabEnabled((v) => !v)}
-              className="w-full flex items-center justify-between px-3 py-3 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
-            >
-              <span>Enable Editor tab (CodeMirror)</span>
-              <span className="text-xs text-cc-muted">{editorTabEnabled ? "On" : "Off"}</span>
-            </button>
-            <p className="mt-1.5 text-xs text-cc-muted">
-              Shows a simple in-app file editor in the session tabs.
-            </p>
-          </div>
-
-          {error && (
-            <div className="px-3 py-2 rounded-lg bg-cc-error/10 border border-cc-error/20 text-xs text-cc-error">
-              {error}
-            </div>
-          )}
-
-          {saved && (
-            <div className="px-3 py-2 rounded-lg bg-cc-success/10 border border-cc-success/20 text-xs text-cc-success">
-              Settings saved.
-            </div>
-          )}
-
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-cc-muted">
-              {loading ? "Loading..." : configured ? "OpenRouter key configured" : "OpenRouter key not configured"}
-            </span>
-            <button
-              type="submit"
-              disabled={saving || loading}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                saving || loading
-                  ? "bg-cc-hover text-cc-muted cursor-not-allowed"
-                  : "bg-cc-primary hover:bg-cc-primary-hover text-white cursor-pointer"
+              onClick={() => scrollToSection(cat.id)}
+              className={`shrink-0 px-3 py-2 min-h-[44px] rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                activeSection === cat.id
+                  ? "text-cc-primary bg-cc-primary/8"
+                  : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
               }`}
             >
-              {saving ? "Saving..." : "Save"}
+              {cat.label}
             </button>
-          </div>
-        </form>
+          ))}
+        </nav>
+      </div>
 
-        <div className="mt-4 bg-cc-card border border-cc-border rounded-xl p-4 sm:p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-cc-fg">Notifications</h2>
-          <button
-            type="button"
-            onClick={toggleNotificationSound}
-            className="w-full flex items-center justify-between px-3 py-3 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
-          >
-            <span>Sound</span>
-            <span className="text-xs text-cc-muted">{notificationSound ? "On" : "Off"}</span>
-          </button>
-          {notificationApiAvailable && (
+      {/* Body: desktop sidebar + content */}
+      <div className="flex-1 min-h-0 flex max-w-5xl w-full mx-auto">
+        {/* Desktop sidebar nav */}
+        <nav
+          className="hidden sm:flex flex-col gap-0.5 w-44 shrink-0 pt-2 pr-6 pl-8 sticky top-0 self-start"
+          aria-label="Settings categories"
+        >
+          {CATEGORIES.map((cat) => (
             <button
+              key={cat.id}
               type="button"
-              onClick={async () => {
-                if (!notificationDesktop) {
-                  if (Notification.permission !== "granted") {
-                    const result = await Notification.requestPermission();
-                    if (result !== "granted") return;
-                  }
-                  setNotificationDesktop(true);
-                } else {
-                  setNotificationDesktop(false);
-                }
-              }}
-              className="w-full flex items-center justify-between px-3 py-3 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
-            >
-              <span>Desktop Alerts</span>
-              <span className="text-xs text-cc-muted">{notificationDesktop ? "On" : "Off"}</span>
-            </button>
-          )}
-        </div>
-
-        <div className="mt-4 bg-cc-card border border-cc-border rounded-xl p-4 sm:p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-cc-fg">Updates</h2>
-          {updateInfo ? (
-            <p className="text-xs text-cc-muted">
-              Current version: v{updateInfo.currentVersion}
-              {updateInfo.latestVersion ? ` • Latest: v${updateInfo.latestVersion}` : ""}
-            </p>
-          ) : (
-            <p className="text-xs text-cc-muted">Version information not loaded yet.</p>
-          )}
-
-          {updateError && (
-            <div className="px-3 py-2 rounded-lg bg-cc-error/10 border border-cc-error/20 text-xs text-cc-error">
-              {updateError}
-            </div>
-          )}
-
-          {updateStatus && (
-            <div className="px-3 py-2 rounded-lg bg-cc-success/10 border border-cc-success/20 text-xs text-cc-success">
-              {updateStatus}
-            </div>
-          )}
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={onCheckUpdates}
-              disabled={checkingUpdates}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                checkingUpdates
-                  ? "bg-cc-hover text-cc-muted cursor-not-allowed"
-                  : "bg-cc-hover hover:bg-cc-active text-cc-fg cursor-pointer"
+              onClick={() => scrollToSection(cat.id)}
+              className={`text-left px-3 py-2 min-h-[44px] rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                activeSection === cat.id
+                  ? "text-cc-primary bg-cc-primary/8"
+                  : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
               }`}
             >
-              {checkingUpdates ? "Checking..." : "Check for updates"}
+              {cat.label}
             </button>
+          ))}
+        </nav>
 
-            {updateInfo?.isServiceMode ? (
-              <button
-                type="button"
-                onClick={onTriggerUpdate}
-                disabled={updatingApp || updateInfo.updateInProgress || !updateInfo.updateAvailable}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  updatingApp || updateInfo.updateInProgress || !updateInfo.updateAvailable
-                    ? "bg-cc-hover text-cc-muted cursor-not-allowed"
-                    : "bg-cc-primary hover:bg-cc-primary-hover text-white cursor-pointer"
-                }`}
-              >
-                {updatingApp || updateInfo.updateInProgress ? "Updating..." : "Update & Restart"}
-              </button>
-            ) : (
-              <p className="text-xs text-cc-muted self-center">
-                Install service mode with <code className="font-mono-code bg-cc-code-bg px-1 py-0.5 rounded text-cc-code-fg">the-companion install</code> to enable one-click updates.
-              </p>
-            )}
+        {/* Scrollable content */}
+        <div ref={contentRef} className="flex-1 min-w-0 overflow-y-auto px-4 sm:px-8 sm:pl-0 pb-safe">
+          <div className="space-y-10 py-4 sm:py-2">
+            {/* General */}
+            <section id="general" ref={setSectionRef("general")}>
+              <h2 className="text-sm font-semibold text-cc-fg mb-4">General</h2>
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={toggleDarkMode}
+                  className="w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
+                >
+                  <span>Theme</span>
+                  <span className="text-xs text-cc-muted">{darkMode ? "Dark" : "Light"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setEditorTabEnabled((v) => !v)}
+                  className="w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
+                >
+                  <span>Enable Editor tab (CodeMirror)</span>
+                  <span className="text-xs text-cc-muted">{editorTabEnabled ? "On" : "Off"}</span>
+                </button>
+                <p className="text-xs text-cc-muted px-1">
+                  Shows a simple in-app file editor in the session tabs.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => setDiffBase(diffBase === "last-commit" ? "default-branch" : "last-commit")}
+                  className="w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
+                >
+                  <span>Diff compare against</span>
+                  <span className="text-xs text-cc-muted">
+                    {diffBase === "last-commit" ? "Last commit (HEAD)" : "Default branch"}
+                  </span>
+                </button>
+                <p className="text-xs text-cc-muted px-1">
+                  Last commit shows only uncommitted changes. Default branch shows all changes since diverging from main.
+                </p>
+              </div>
+            </section>
+
+            {/* Notifications */}
+            <section id="notifications" ref={setSectionRef("notifications")}>
+              <h2 className="text-sm font-semibold text-cc-fg mb-4">Notifications</h2>
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={toggleNotificationSound}
+                  className="w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
+                >
+                  <span>Sound</span>
+                  <span className="text-xs text-cc-muted">{notificationSound ? "On" : "Off"}</span>
+                </button>
+                {notificationApiAvailable && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!notificationDesktop) {
+                        if (Notification.permission !== "granted") {
+                          const result = await Notification.requestPermission();
+                          if (result !== "granted") return;
+                        }
+                        setNotificationDesktop(true);
+                      } else {
+                        setNotificationDesktop(false);
+                      }
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
+                  >
+                    <span>Desktop Alerts</span>
+                    <span className="text-xs text-cc-muted">{notificationDesktop ? "On" : "Off"}</span>
+                  </button>
+                )}
+              </div>
+            </section>
+
+            {/* OpenRouter */}
+            <section id="openrouter" ref={setSectionRef("openrouter")}>
+              <h2 className="text-sm font-semibold text-cc-fg mb-4">OpenRouter</h2>
+              <form onSubmit={onSave} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1.5" htmlFor="openrouter-key">
+                    OpenRouter API Key
+                  </label>
+                  <input
+                    id="openrouter-key"
+                    type="password"
+                    value={openrouterApiKey}
+                    onChange={(e) => setOpenrouterApiKey(e.target.value)}
+                    placeholder={configured ? "Configured. Enter a new key to replace." : "sk-or-v1-..."}
+                    className="w-full px-3 py-2.5 min-h-[44px] text-sm bg-cc-bg rounded-lg text-cc-fg placeholder:text-cc-muted focus:outline-none focus:ring-1 focus:ring-cc-primary/40 transition-shadow"
+                  />
+                  <p className="mt-1.5 text-xs text-cc-muted">
+                    Auto-renaming is disabled until this key is configured.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1.5" htmlFor="openrouter-model">
+                    OpenRouter Model
+                  </label>
+                  <input
+                    id="openrouter-model"
+                    type="text"
+                    value={openrouterModel}
+                    onChange={(e) => setOpenrouterModel(e.target.value)}
+                    placeholder="openrouter/free"
+                    className="w-full px-3 py-2.5 min-h-[44px] text-sm bg-cc-bg rounded-lg text-cc-fg placeholder:text-cc-muted focus:outline-none focus:ring-1 focus:ring-cc-primary/40 transition-shadow"
+                  />
+                </div>
+
+                {error && (
+                  <div className="px-3 py-2 rounded-lg bg-cc-error/10 border border-cc-error/20 text-xs text-cc-error">
+                    {error}
+                  </div>
+                )}
+
+                {saved && (
+                  <div className="px-3 py-2 rounded-lg bg-cc-success/10 border border-cc-success/20 text-xs text-cc-success">
+                    Settings saved.
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-cc-muted">
+                    {loading ? "Loading..." : configured ? "OpenRouter key configured" : "OpenRouter key not configured"}
+                  </span>
+                  <button
+                    type="submit"
+                    disabled={saving || loading}
+                    className={`px-3 py-2 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
+                      saving || loading
+                        ? "bg-cc-hover text-cc-muted cursor-not-allowed"
+                        : "bg-cc-primary hover:bg-cc-primary-hover text-white cursor-pointer"
+                    }`}
+                  >
+                    {saving ? "Saving..." : "Save"}
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            {/* Updates */}
+            <section id="updates" ref={setSectionRef("updates")}>
+              <h2 className="text-sm font-semibold text-cc-fg mb-4">Updates</h2>
+              <div className="space-y-3">
+                {updateInfo ? (
+                  <p className="text-xs text-cc-muted">
+                    Current version: v{updateInfo.currentVersion}
+                    {updateInfo.latestVersion ? ` • Latest: v${updateInfo.latestVersion}` : ""}
+                  </p>
+                ) : (
+                  <p className="text-xs text-cc-muted">Version information not loaded yet.</p>
+                )}
+
+                {updateError && (
+                  <div className="px-3 py-2 rounded-lg bg-cc-error/10 border border-cc-error/20 text-xs text-cc-error">
+                    {updateError}
+                  </div>
+                )}
+
+                {updateStatus && (
+                  <div className="px-3 py-2 rounded-lg bg-cc-success/10 border border-cc-success/20 text-xs text-cc-success">
+                    {updateStatus}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={onCheckUpdates}
+                    disabled={checkingUpdates}
+                    className={`px-3 py-2 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
+                      checkingUpdates
+                        ? "bg-cc-hover text-cc-muted cursor-not-allowed"
+                        : "bg-cc-hover hover:bg-cc-active text-cc-fg cursor-pointer"
+                    }`}
+                  >
+                    {checkingUpdates ? "Checking..." : "Check for updates"}
+                  </button>
+
+                  {updateInfo?.isServiceMode ? (
+                    <button
+                      type="button"
+                      onClick={onTriggerUpdate}
+                      disabled={updatingApp || updateInfo.updateInProgress || !updateInfo.updateAvailable}
+                      className={`px-3 py-2 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
+                        updatingApp || updateInfo.updateInProgress || !updateInfo.updateAvailable
+                          ? "bg-cc-hover text-cc-muted cursor-not-allowed"
+                          : "bg-cc-primary hover:bg-cc-primary-hover text-white cursor-pointer"
+                      }`}
+                    >
+                      {updatingApp || updateInfo.updateInProgress ? "Updating..." : "Update & Restart"}
+                    </button>
+                  ) : (
+                    <p className="text-xs text-cc-muted self-center">
+                      Install service mode with <code className="font-mono-code bg-cc-code-bg px-1 py-0.5 rounded text-cc-code-fg">the-companion install</code> to enable one-click updates.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            {/* Telemetry */}
+            <section id="telemetry" ref={setSectionRef("telemetry")}>
+              <h2 className="text-sm font-semibold text-cc-fg mb-4">Telemetry</h2>
+              <div className="space-y-3">
+                <p className="text-xs text-cc-muted">
+                  Anonymous product analytics and crash reports via PostHog to improve reliability.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !telemetryEnabled;
+                    setTelemetryPreferenceEnabled(next);
+                    setTelemetryEnabled(next);
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
+                >
+                  <span>Usage analytics and errors</span>
+                  <span className="text-xs text-cc-muted">{telemetryEnabled ? "On" : "Off"}</span>
+                </button>
+                <p className="text-xs text-cc-muted">
+                  Browser Do Not Track is respected automatically.
+                </p>
+              </div>
+            </section>
+
+            {/* Environments */}
+            <section id="environments" ref={setSectionRef("environments")}>
+              <h2 className="text-sm font-semibold text-cc-fg mb-4">Environments</h2>
+              <div className="space-y-3">
+                <p className="text-xs text-cc-muted">
+                  Manage reusable environment profiles used when creating sessions.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.location.hash = "#/environments";
+                  }}
+                  className="px-3 py-2 min-h-[44px] rounded-lg text-sm font-medium bg-cc-primary hover:bg-cc-primary-hover text-white transition-colors cursor-pointer"
+                >
+                  Open Environments Page
+                </button>
+              </div>
+            </section>
           </div>
-        </div>
-
-        <div className="mt-4 bg-cc-card border border-cc-border rounded-xl p-4 sm:p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-cc-fg">Appearance</h2>
-          <button
-            type="button"
-            onClick={toggleDarkMode}
-            className="w-full flex items-center justify-between px-3 py-3 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
-          >
-            <span>Theme</span>
-            <span className="text-xs text-cc-muted">{darkMode ? "Dark" : "Light"}</span>
-          </button>
-        </div>
-
-        <div className="mt-4 bg-cc-card border border-cc-border rounded-xl p-4 sm:p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-cc-fg">Diff</h2>
-          <button
-            type="button"
-            onClick={() => setDiffBase(diffBase === "last-commit" ? "default-branch" : "last-commit")}
-            className="w-full flex items-center justify-between px-3 py-3 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
-          >
-            <span>Compare against</span>
-            <span className="text-xs text-cc-muted">
-              {diffBase === "last-commit" ? "Last commit (HEAD)" : "Default branch"}
-            </span>
-          </button>
-          <p className="text-xs text-cc-muted">
-            Last commit shows only uncommitted changes. Default branch shows all changes since diverging from main.
-          </p>
-        </div>
-
-        <div className="mt-4 bg-cc-card border border-cc-border rounded-xl p-4 sm:p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-cc-fg">Telemetry</h2>
-          <p className="text-xs text-cc-muted">
-            Anonymous product analytics and crash reports via PostHog to improve reliability.
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              const next = !telemetryEnabled;
-              setTelemetryPreferenceEnabled(next);
-              setTelemetryEnabled(next);
-            }}
-            className="w-full flex items-center justify-between px-3 py-3 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
-          >
-            <span>Usage analytics and errors</span>
-            <span className="text-xs text-cc-muted">{telemetryEnabled ? "On" : "Off"}</span>
-          </button>
-          <p className="text-xs text-cc-muted">
-            Browser Do Not Track is respected automatically.
-          </p>
-        </div>
-
-        <div className="mt-4 bg-cc-card border border-cc-border rounded-xl p-4 sm:p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-cc-fg">Environments</h2>
-          <p className="text-xs text-cc-muted">
-            Manage reusable environment profiles used when creating sessions.
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              window.location.hash = "#/environments";
-            }}
-            className="px-3 py-2 rounded-lg text-sm font-medium bg-cc-primary hover:bg-cc-primary-hover text-white transition-colors cursor-pointer"
-          >
-            Open Environments Page
-          </button>
         </div>
       </div>
     </div>

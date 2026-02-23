@@ -2,10 +2,21 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 
+// IntersectionObserver is not available in jsdom — provide a no-op mock
+// so the scroll-tracking logic in SettingsPage doesn't crash during tests.
+class MockIntersectionObserver {
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+  constructor(_cb: IntersectionObserverCallback, _opts?: IntersectionObserverInit) {}
+}
+(globalThis as Record<string, unknown>).IntersectionObserver = MockIntersectionObserver;
+
 interface MockStoreState {
   darkMode: boolean;
   notificationSound: boolean;
   notificationDesktop: boolean;
+  diffBase: string;
   updateInfo: {
     currentVersion: string;
     latestVersion: string | null;
@@ -17,6 +28,7 @@ interface MockStoreState {
   toggleDarkMode: ReturnType<typeof vi.fn>;
   toggleNotificationSound: ReturnType<typeof vi.fn>;
   setNotificationDesktop: ReturnType<typeof vi.fn>;
+  setDiffBase: ReturnType<typeof vi.fn>;
   setUpdateInfo: ReturnType<typeof vi.fn>;
   setUpdateOverlayActive: ReturnType<typeof vi.fn>;
   setEditorTabEnabled: ReturnType<typeof vi.fn>;
@@ -29,10 +41,12 @@ function createMockState(overrides: Partial<MockStoreState> = {}): MockStoreStat
     darkMode: false,
     notificationSound: true,
     notificationDesktop: false,
+    diffBase: "last-commit",
     updateInfo: null,
     toggleDarkMode: vi.fn(),
     toggleNotificationSound: vi.fn(),
     setNotificationDesktop: vi.fn(),
+    setDiffBase: vi.fn(),
     setUpdateInfo: vi.fn(),
     setUpdateOverlayActive: vi.fn(),
     setEditorTabEnabled: vi.fn(),
@@ -197,6 +211,8 @@ describe("SettingsPage", () => {
     });
   });
 
+  // Editor tab toggle is in the General section; toggling it updates local state,
+  // which is then included in the OpenRouter form's save payload.
   it("saves editor tab toggle in settings payload", async () => {
     render(<SettingsPage />);
     await screen.findByText("OpenRouter key configured");
@@ -381,5 +397,31 @@ describe("SettingsPage", () => {
     });
     expect(mockState.setUpdateOverlayActive).toHaveBeenCalledWith(true);
     expect(await screen.findByText("Update started. Server will restart shortly.")).toBeInTheDocument();
+  });
+
+  // Verify left sidebar nav renders category labels for quick navigation
+  it("renders category navigation with all section labels", async () => {
+    render(<SettingsPage />);
+    await screen.findByText("OpenRouter key configured");
+
+    // Each category appears in both desktop sidebar and mobile nav (jsdom renders both)
+    const generalButtons = screen.getAllByRole("button", { name: "General" });
+    expect(generalButtons.length).toBeGreaterThanOrEqual(1);
+
+    const notifButtons = screen.getAllByRole("button", { name: "Notifications" });
+    expect(notifButtons.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // Verify section headings have correct IDs for anchor-based scrolling
+  it("renders section headings with anchor IDs", async () => {
+    render(<SettingsPage />);
+    await screen.findByText("OpenRouter key configured");
+
+    expect(document.getElementById("general")).toBeInTheDocument();
+    expect(document.getElementById("notifications")).toBeInTheDocument();
+    expect(document.getElementById("openrouter")).toBeInTheDocument();
+    expect(document.getElementById("updates")).toBeInTheDocument();
+    expect(document.getElementById("telemetry")).toBeInTheDocument();
+    expect(document.getElementById("environments")).toBeInTheDocument();
   });
 });
