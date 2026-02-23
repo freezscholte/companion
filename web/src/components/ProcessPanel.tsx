@@ -448,54 +448,6 @@ function Spinner({
   );
 }
 
-function LoadingSkeletonBar({
-  widthClass,
-}: {
-  widthClass: string;
-}) {
-  return (
-    <div className={`h-2 rounded bg-cc-hover/70 animate-pulse ${widthClass}`} aria-hidden="true" />
-  );
-}
-
-function ProcessPanelLoadingPreview() {
-  return (
-    <div className="w-full max-w-[560px] mt-6 rounded-lg border border-cc-border bg-cc-hover/10 overflow-hidden">
-      <div className="px-4 py-3 bg-cc-hover/20 border-b border-cc-border">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="inline-flex items-center justify-center w-4 h-4 text-cc-muted/80">
-            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
-              <path d="M4.25 2.5L7.75 6 4.25 9.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
-          <div className="text-[9px] rounded px-1 py-0.5 border border-cc-border text-cc-muted uppercase tracking-wide">
-            Folder
-          </div>
-          <LoadingSkeletonBar widthClass="w-24" />
-          <LoadingSkeletonBar widthClass="w-20" />
-        </div>
-        <LoadingSkeletonBar widthClass="w-56" />
-      </div>
-      <div className="ml-4 border-l border-cc-border/30">
-        {[0, 1].map((rowIdx) => (
-          <div key={rowIdx} className={`px-4 py-3 ${rowIdx === 0 ? "border-b border-cc-border/40" : ""}`}>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-cc-primary/70 animate-pulse" />
-              <LoadingSkeletonBar widthClass={rowIdx === 0 ? "w-40" : "w-32"} />
-            </div>
-            <div className="flex items-center gap-2 mb-2">
-              <LoadingSkeletonBar widthClass="w-12" />
-              <LoadingSkeletonBar widthClass="w-20" />
-              <LoadingSkeletonBar widthClass="w-24" />
-            </div>
-            <LoadingSkeletonBar widthClass={rowIdx === 0 ? "w-72" : "w-64"} />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function LoadingStepRow({
   label,
   state,
@@ -576,10 +528,6 @@ function ProcessPanelLoadingState({
           })}
         </div>
       </div>
-      <p className="mt-4 text-[10px] text-cc-muted/90 uppercase tracking-wide">
-        Previewing result layout
-      </p>
-      <ProcessPanelLoadingPreview />
     </div>
   );
 }
