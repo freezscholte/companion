@@ -126,7 +126,7 @@ export function TopBar() {
   }, [showWorkspaceControls, workspaceTabs, activeTab, cwd, quickTerminalOpen, quickTerminalTabs.length, openQuickTerminal, defaultTerminalOpts, setActiveTab, markChatTabReentry, currentSessionId]);
 
   return (
-    <header className="relative shrink-0 h-11 px-4 bg-cc-bg border-b border-cc-separator">
+    <header className="relative shrink-0 h-11 px-4 bg-cc-bg">
       <div className="h-full flex items-center gap-1 min-w-0">
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}

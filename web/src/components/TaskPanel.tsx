@@ -1023,7 +1023,7 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
   return (
     <aside className="w-full lg:w-[320px] h-full flex flex-col overflow-hidden bg-cc-card border-l border-cc-border">
       {/* Header */}
-      <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-cc-border">
+      <div className="shrink-0 h-11 flex items-center justify-between px-4 bg-cc-card">
         <span className="text-sm font-semibold text-cc-fg tracking-tight">
           {configMode ? "Panel Settings" : "Context"}
         </span>
@@ -1071,7 +1071,7 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
           </div>
 
           {/* Settings button at bottom */}
-          <div className="shrink-0 border-t border-cc-border px-4 py-2 pb-safe">
+          <div className="shrink-0 px-4 py-2 pb-safe">
             <button
               onClick={() => useStore.getState().setTaskPanelConfigMode(true)}
               className="flex items-center gap-1.5 text-[11px] text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"

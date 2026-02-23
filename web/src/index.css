@@ -28,8 +28,8 @@
   --color-cc-muted: #6f6e69;
   --color-cc-sidebar: #f5f4ef;
   --color-cc-input-bg: #ffffff;
-  --color-cc-code-bg: #1e1e1e;
-  --color-cc-code-fg: #d4d4d4;
+  --color-cc-code-bg: #f5f4ef;
+  --color-cc-code-fg: #2d2d2d;
   --color-cc-hover: rgba(31,30,29,0.05);
   --color-cc-active: rgba(31,30,29,0.09);
   --color-cc-success: #2d7d46;
