@@ -1021,7 +1021,7 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
   });
 
   return (
-    <aside className="w-full lg:w-[320px] h-full flex flex-col overflow-hidden bg-cc-card border-l border-cc-border">
+    <aside className="w-full lg:w-[320px] h-full flex flex-col overflow-hidden bg-cc-card">
       {/* Header */}
       <div className="shrink-0 h-11 flex items-center justify-between px-4 bg-cc-card">
         <span className="text-sm font-semibold text-cc-fg tracking-tight">

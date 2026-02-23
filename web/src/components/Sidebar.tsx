@@ -317,7 +317,7 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="w-full md:w-[260px] h-full flex flex-col bg-cc-sidebar border-r border-cc-border">
+    <aside className="w-full md:w-[260px] h-full flex flex-col bg-cc-sidebar">
       {/* Header */}
       <div className="p-3.5 pb-2">
         <div className="flex items-center gap-2.5">
@@ -400,7 +400,7 @@ export function Sidebar() {
             ))}
 
             {cronSessions.length > 0 && (
-              <div className="mt-2 pt-2 border-t border-cc-border">
+              <div className="mt-2 pt-2">
                 <button
                   onClick={() => setShowCronSessions(!showCronSessions)}
                   className="w-full px-3 py-1.5 text-[11px] font-medium text-violet-400 uppercase tracking-wider flex items-center gap-1.5 hover:text-violet-300 transition-colors cursor-pointer"
@@ -432,7 +432,7 @@ export function Sidebar() {
             )}
 
             {archivedSessions.length > 0 && (
-              <div className="mt-2 pt-2 border-t border-cc-border">
+              <div className="mt-2 pt-2">
                 <button
                   onClick={() => setShowArchived(!showArchived)}
                   className="w-full px-3 py-1.5 text-[11px] font-medium text-cc-muted uppercase tracking-wider flex items-center gap-1.5 hover:text-cc-fg transition-colors cursor-pointer"
@@ -479,7 +479,7 @@ export function Sidebar() {
       </div>
 
       {/* Footer */}
-      <div className="p-2 pb-safe border-t border-cc-border bg-cc-sidebar-footer">
+      <div className="p-2 pb-safe bg-cc-sidebar-footer">
         <div className="grid grid-cols-3 gap-1">
           {NAV_ITEMS.map((item) => {
             const isActive = item.activePages
