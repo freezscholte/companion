@@ -18,16 +18,16 @@
 
 @theme {
   /* Light Mode (default) */
-  --color-cc-bg: #ffffff;
+  --color-cc-bg: #faf9f6;
   --color-cc-fg: #141413;
-  --color-cc-card: #FFFFFF;
+  --color-cc-card: #ffffff;
   --color-cc-primary: #d97757;
   --color-cc-primary-hover: #e08b6b;
   --color-cc-user-bubble: #f0efe8;
-  --color-cc-border: rgba(31,30,29,0.10);
+  --color-cc-border: rgba(31,30,29,0.12);
   --color-cc-muted: #6f6e69;
   --color-cc-sidebar: #f5f4ef;
-  --color-cc-input-bg: #FFFFFF;
+  --color-cc-input-bg: #ffffff;
   --color-cc-code-bg: #1e1e1e;
   --color-cc-code-fg: #d4d4d4;
   --color-cc-hover: rgba(31,30,29,0.05);
@@ -36,7 +36,7 @@
   --color-cc-error: #c53030;
   --color-cc-warning: #b7791f;
   --color-cc-sidebar-footer: #edece5;
-  --color-cc-separator: rgba(31,30,29,0.06);
+  --color-cc-separator: rgba(31,30,29,0.10);
 }
 
 @keyframes fadeSlideIn {

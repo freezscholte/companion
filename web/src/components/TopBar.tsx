@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { useStore } from "../store.js";
 import { parseHash } from "../utils/routing.js";
 
@@ -232,6 +232,7 @@ export function TopBar() {
         )}
 
         <div className="flex items-center gap-0.5 shrink-0">
+          <ThemeToggle />
           {showContextToggle && (
             <button
               onClick={() => setTaskPanelOpen(!taskPanelOpen)}
@@ -253,5 +254,30 @@ export function TopBar() {
       </div>
 
     </header>
+  );
+}
+
+function ThemeToggle() {
+  const darkMode = useStore((s) => s.darkMode);
+  const toggle = useCallback(() => useStore.getState().toggleDarkMode(), []);
+
+  return (
+    <button
+      onClick={toggle}
+      className="flex items-center justify-center w-8 h-8 rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+      title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+      aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+    >
+      {darkMode ? (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-[15px] h-[15px]">
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32l1.41-1.41" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-[15px] h-[15px]">
+          <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z" />
+        </svg>
+      )}
+    </button>
   );
 }
