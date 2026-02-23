@@ -697,6 +697,8 @@ function JobForm({
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const [showBackendDropdown, setShowBackendDropdown] = useState(false);
+  const backendDropdownRef = useRef<HTMLDivElement>(null);
 
   const models = dynamicModels || getModelsForBackend(form.backendType);
   const selectedModel = models.find((m) => m.value === form.model) || models[0];
@@ -725,10 +727,14 @@ function JobForm({
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Close model dropdown on outside click
+  // Close dropdowns on outside click
   const modelDropdownRefs = useMemo(() => [modelDropdownRef], []);
   const closeModelDropdown = useCallback(() => setShowModelDropdown(false), []);
   useClickOutside(modelDropdownRefs, closeModelDropdown, showModelDropdown);
+
+  const backendDropdownRefs = useMemo(() => [backendDropdownRef], []);
+  const closeBackendDropdown = useCallback(() => setShowBackendDropdown(false), []);
+  useClickOutside(backendDropdownRefs, closeBackendDropdown, showBackendDropdown);
 
   // Folder display label
   const dirLabel = form.cwd
@@ -824,18 +830,40 @@ function JobForm({
       {/* Backend + Model + Folder row */}
       <div className="flex flex-wrap items-center gap-1.5">
         {/* Backend selector */}
-        <select
-          value={form.backendType}
-          onChange={(e) => {
-            const next = e.target.value as "claude" | "codex";
-            update({ backendType: next, model: getDefaultModel(next) });
-          }}
-          className="px-2.5 py-2 min-h-[44px] text-xs font-medium rounded-lg bg-cc-bg text-cc-fg cursor-pointer focus:outline-none focus:ring-1 focus:ring-cc-primary/40 transition-shadow appearance-none pr-7 bg-no-repeat bg-[length:12px] bg-[right_8px_center]"
-          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%236f6e69'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E")` }}
-        >
-          <option value="claude">Claude Code</option>
-          <option value="codex">Codex</option>
-        </select>
+        <div className="relative" ref={backendDropdownRef}>
+          <button
+            onClick={() => setShowBackendDropdown(!showBackendDropdown)}
+            className="flex items-center gap-1.5 px-2.5 py-2 min-h-[44px] text-xs font-medium text-cc-fg rounded-lg hover:bg-cc-hover transition-colors cursor-pointer"
+          >
+            <span>{form.backendType === "codex" ? "Codex" : "Claude Code"}</span>
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-50">
+              <path d="M4 6l4 4 4-4" />
+            </svg>
+          </button>
+          {showBackendDropdown && (
+            <div className="absolute left-0 bottom-full mb-1 w-40 bg-cc-card rounded-xl shadow-lg z-10 py-1">
+              {(
+                [
+                  { value: "claude", label: "Claude Code" },
+                  { value: "codex", label: "Codex" },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => {
+                    update({ backendType: opt.value, model: getDefaultModel(opt.value) });
+                    setShowBackendDropdown(false);
+                  }}
+                  className={`w-full px-3 py-2.5 min-h-[44px] text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer ${
+                    opt.value === form.backendType ? "text-cc-primary font-medium" : "text-cc-fg"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Model dropdown */}
         <div className="relative" ref={modelDropdownRef}>
