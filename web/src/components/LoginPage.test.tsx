@@ -4,9 +4,11 @@ import "@testing-library/jest-dom";
 
 // ---- Mock API ----
 const mockVerifyAuthToken = vi.fn().mockResolvedValue(true);
+const mockAutoAuth = vi.fn().mockResolvedValue(null);
 
 vi.mock("../api.js", () => ({
   verifyAuthToken: (...args: unknown[]) => mockVerifyAuthToken(...args),
+  autoAuth: () => mockAutoAuth(),
 }));
 
 // ---- Mock Store ----
@@ -42,14 +44,14 @@ beforeEach(() => {
 describe("LoginPage", () => {
   it("renders the login form with title, input, and submit button", () => {
     // The login page should display the app title, a token input field,
-    // a submit button, and a help message
+    // a submit button, and help text about scanning QR with native camera
     render(<LoginPage />);
 
     expect(screen.getByText("The Companion")).toBeInTheDocument();
     expect(screen.getByLabelText("Auth Token")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Paste your token here")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Login" })).toBeInTheDocument();
-    expect(screen.getByText(/Find your token/)).toBeInTheDocument();
+    expect(screen.getByText(/Scan the QR code/)).toBeInTheDocument();
   });
 
   it("disables submit button when input is empty", () => {
@@ -179,9 +181,39 @@ describe("LoginPage", () => {
   });
 });
 
+describe("LoginPage localhost auto-auth", () => {
+  it("auto-authenticates on localhost without user interaction", async () => {
+    // When the server detects a localhost request, it returns the token
+    // so the user never sees the login form on first launch
+    mockAutoAuth.mockResolvedValue("localhost-auto-token");
+    render(<LoginPage />);
+
+    await waitFor(() => {
+      expect(mockAutoAuth).toHaveBeenCalled();
+      expect(mockState.setAuthToken).toHaveBeenCalledWith("localhost-auto-token");
+    });
+  });
+
+  it("falls back to URL token when auto-auth returns null (remote access)", async () => {
+    // On remote connections, auto-auth returns null — then ?token= is checked
+    mockAutoAuth.mockResolvedValue(null);
+    window.history.replaceState({}, "", "/?token=url-token-abc");
+    mockVerifyAuthToken.mockResolvedValue(true);
+
+    render(<LoginPage />);
+
+    await waitFor(() => {
+      expect(mockVerifyAuthToken).toHaveBeenCalledWith("url-token-abc");
+      expect(mockState.setAuthToken).toHaveBeenCalledWith("url-token-abc");
+    });
+  });
+});
+
 describe("LoginPage auto-login from URL", () => {
   it("auto-authenticates when ?token= is present in the URL", async () => {
-    // When the page loads with ?token=xxx, it should auto-verify and login
+    // When the page loads with ?token=xxx (e.g. from a QR code scanned with
+    // the native iPhone camera), it should auto-verify and login
+    mockAutoAuth.mockResolvedValue(null);
     window.history.replaceState({}, "", "/?token=url-token-abc");
     mockVerifyAuthToken.mockResolvedValue(true);
 
@@ -195,6 +227,7 @@ describe("LoginPage auto-login from URL", () => {
 
   it("shows error when URL token is invalid", async () => {
     // An invalid URL token should display an error message
+    mockAutoAuth.mockResolvedValue(null);
     window.history.replaceState({}, "", "/?token=invalid-url-token");
     mockVerifyAuthToken.mockResolvedValue(false);
 

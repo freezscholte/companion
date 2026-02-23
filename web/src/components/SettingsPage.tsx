@@ -10,6 +10,7 @@ interface SettingsPageProps {
 
 const CATEGORIES = [
   { id: "general", label: "General" },
+  { id: "authentication", label: "Authentication" },
   { id: "notifications", label: "Notifications" },
   { id: "openrouter", label: "OpenRouter" },
   { id: "updates", label: "Updates" },
@@ -48,6 +49,15 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [telemetryEnabled, setTelemetryEnabled] = useState(getTelemetryPreferenceEnabled());
   const [activeSection, setActiveSection] = useState<CategoryId>("general");
   const [apiKeyFocused, setApiKeyFocused] = useState(false);
+
+  // Auth section state
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [tokenRevealed, setTokenRevealed] = useState(false);
+  const [qrCodes, setQrCodes] = useState<{ label: string; url: string; qrDataUrl: string }[] | null>(null);
+  const [selectedQrIndex, setSelectedQrIndex] = useState(0);
+  const [qrLoading, setQrLoading] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [tokenCopied, setTokenCopied] = useState(false);
 
   const contentRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -106,6 +116,9 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
+
+    // Fetch auth token in parallel (non-blocking)
+    api.getAuthToken().then((res) => setAuthToken(res.token)).catch(() => {});
   }, []);
 
   async function onSave(e: React.FormEvent) {
@@ -290,6 +303,154 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                 <p className="text-xs text-cc-muted px-1">
                   Last commit shows only uncommitted changes. Default branch shows all changes since diverging from main.
                 </p>
+              </div>
+            </section>
+
+            {/* Authentication */}
+            <section id="authentication" ref={setSectionRef("authentication")}>
+              <h2 className="text-sm font-semibold text-cc-fg mb-4">Authentication</h2>
+              <div className="space-y-4">
+                <p className="text-xs text-cc-muted">
+                  Use the auth token or QR code to connect additional devices (e.g. mobile over Tailscale).
+                </p>
+
+                {/* Token display */}
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Auth Token</label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 px-3 py-2.5 min-h-[44px] text-sm bg-cc-bg rounded-lg text-cc-fg font-mono-code select-all break-all flex items-center">
+                      {authToken
+                        ? tokenRevealed
+                          ? authToken
+                          : "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+                        : <span className="text-cc-muted">Loading...</span>}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setTokenRevealed((v) => !v)}
+                      className="px-3 py-2.5 min-h-[44px] rounded-lg text-sm bg-cc-hover hover:bg-cc-active text-cc-fg transition-colors cursor-pointer"
+                      title={tokenRevealed ? "Hide token" : "Show token"}
+                    >
+                      {tokenRevealed ? "Hide" : "Show"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (authToken) {
+                          navigator.clipboard.writeText(authToken).then(() => {
+                            setTokenCopied(true);
+                            setTimeout(() => setTokenCopied(false), 1500);
+                          });
+                        }
+                      }}
+                      disabled={!authToken}
+                      className="px-3 py-2.5 min-h-[44px] rounded-lg text-sm bg-cc-hover hover:bg-cc-active text-cc-fg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Copy token to clipboard"
+                    >
+                      {tokenCopied ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* QR code with address tabs */}
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Mobile Login QR</label>
+                  {qrCodes && qrCodes.length > 0 ? (
+                    <div className="space-y-3">
+                      {/* Address tabs — pick which network to use */}
+                      {qrCodes.length > 1 && (
+                        <div className="flex gap-1">
+                          {qrCodes.map((qr, i) => (
+                            <button
+                              key={qr.label}
+                              type="button"
+                              onClick={() => setSelectedQrIndex(i)}
+                              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                                i === selectedQrIndex
+                                  ? "bg-cc-primary text-white"
+                                  : "bg-cc-hover text-cc-muted hover:text-cc-fg"
+                              }`}
+                            >
+                              {qr.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <div className="inline-block rounded-lg bg-white p-2">
+                        <img
+                          src={qrCodes[selectedQrIndex].qrDataUrl}
+                          alt={`QR code for ${qrCodes[selectedQrIndex].label} login`}
+                          className="w-48 h-48"
+                        />
+                      </div>
+                      <div className="px-3 py-2 rounded-lg bg-cc-bg text-sm font-mono-code text-cc-fg break-all select-all">
+                        {qrCodes[selectedQrIndex].url}
+                      </div>
+                      <p className="text-xs text-cc-muted">
+                        Scan with your phone&apos;s camera app — it will open the URL and auto-authenticate.
+                      </p>
+                    </div>
+                  ) : qrCodes && qrCodes.length === 0 ? (
+                    <p className="text-xs text-cc-muted">
+                      No remote addresses detected (LAN or Tailscale). Connect to a network to generate a QR code.
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setQrLoading(true);
+                        try {
+                          const data = await api.getAuthQr();
+                          setQrCodes(data.qrCodes);
+                        } catch {
+                          // QR generation failed silently — user can retry
+                        } finally {
+                          setQrLoading(false);
+                        }
+                      }}
+                      disabled={qrLoading}
+                      className={`px-3 py-2 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
+                        qrLoading
+                          ? "bg-cc-hover text-cc-muted cursor-not-allowed"
+                          : "bg-cc-hover hover:bg-cc-active text-cc-fg cursor-pointer"
+                      }`}
+                    >
+                      {qrLoading ? "Generating..." : "Show QR Code"}
+                    </button>
+                  )}
+                </div>
+
+                {/* Regenerate token */}
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!confirm("Regenerate auth token? All existing sessions on other devices will be signed out.")) return;
+                      setRegenerating(true);
+                      try {
+                        const res = await api.regenerateAuthToken();
+                        setAuthToken(res.token);
+                        setTokenRevealed(true);
+                        setQrCodes(null); // invalidate old QR
+                      } catch {
+                        // Regeneration failed
+                      } finally {
+                        setRegenerating(false);
+                      }
+                    }}
+                    disabled={regenerating}
+                    className={`px-3 py-2 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
+                      regenerating
+                        ? "bg-cc-hover text-cc-muted cursor-not-allowed"
+                        : "bg-cc-error/10 hover:bg-cc-error/20 text-cc-error cursor-pointer"
+                    }`}
+                  >
+                    {regenerating ? "Regenerating..." : "Regenerate Token"}
+                  </button>
+                  <p className="mt-1.5 text-xs text-cc-muted">
+                    Creates a new token. All other signed-in devices will need to re-authenticate.
+                  </p>
+                </div>
               </div>
             </section>
 

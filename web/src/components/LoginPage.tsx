@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useStore } from "../store.js";
-import { verifyAuthToken } from "../api.js";
+import { verifyAuthToken, autoAuth } from "../api.js";
 
 export function LoginPage() {
   const [token, setToken] = useState("");
@@ -29,25 +29,34 @@ export function LoginPage() {
     [token, setAuthToken],
   );
 
-  // Auto-login from ?token= URL param
+  // Auto-login: try localhost auto-auth first, then ?token= URL param
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const urlToken = params.get("token");
-    if (urlToken) {
-      setLoading(true);
-      verifyAuthToken(urlToken).then((valid) => {
-        if (valid) {
-          setAuthToken(urlToken);
-          // Strip token from URL to avoid leaking it
-          const url = new URL(window.location.href);
-          url.searchParams.delete("token");
-          window.history.replaceState({}, "", url.toString());
-        } else {
-          setError("Invalid token from URL");
-          setLoading(false);
-        }
-      });
-    }
+    // 1. Try localhost auto-auth — server returns the token for same-machine requests
+    autoAuth().then((localhostToken) => {
+      if (localhostToken) {
+        setAuthToken(localhostToken);
+        return;
+      }
+
+      // 2. Fall back to ?token= URL param (used by QR codes scanned with native camera)
+      const params = new URLSearchParams(window.location.search);
+      const urlToken = params.get("token");
+      if (urlToken) {
+        setLoading(true);
+        verifyAuthToken(urlToken).then((valid) => {
+          if (valid) {
+            setAuthToken(urlToken);
+            // Strip token from URL to avoid leaking it in history
+            const url = new URL(window.location.href);
+            url.searchParams.delete("token");
+            window.history.replaceState({}, "", url.toString());
+          } else {
+            setError("Invalid token from URL");
+            setLoading(false);
+          }
+        });
+      }
+    });
   }, [setAuthToken]);
 
   const [showToken, setShowToken] = useState(false);
@@ -76,7 +85,6 @@ export function LoginPage() {
                 }}
                 placeholder="Paste your token here"
                 className="w-full px-3 py-2 pr-16 text-sm bg-cc-hover border border-cc-border rounded-md text-cc-fg placeholder:text-cc-muted/50 focus:outline-none focus:ring-1 focus:ring-cc-primary focus:border-cc-primary font-mono"
-                autoFocus
                 autoComplete="off"
                 disabled={loading}
               />
@@ -105,7 +113,8 @@ export function LoginPage() {
         </form>
 
         <p className="mt-6 text-[11px] text-cc-muted text-center leading-relaxed">
-          Find your token in the server console output, or scan the QR code from an authenticated device.
+          Scan the QR code in Settings with your phone camera to authenticate,
+          or find your token in the server console.
         </p>
       </div>
     </div>

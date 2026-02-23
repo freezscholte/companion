@@ -88,6 +88,62 @@ export function getLanAddress(): string {
   return "localhost";
 }
 
+/**
+ * Get all available access addresses: localhost, LAN IP, and Tailscale IP.
+ * Tailscale uses 100.x.x.x addresses (CGNAT range) on utun / tailscale interfaces.
+ */
+export function getAllAddresses(): { label: string; ip: string }[] {
+  const result: { label: string; ip: string }[] = [
+    { label: "Localhost", ip: "localhost" },
+  ];
+
+  const interfaces = networkInterfaces();
+  let lanIp: string | null = null;
+  let tailscaleIp: string | null = null;
+
+  for (const name of Object.keys(interfaces)) {
+    const addrs = interfaces[name];
+    if (!addrs) continue;
+    for (const addr of addrs) {
+      if (addr.family !== "IPv4" || addr.internal) continue;
+
+      // Tailscale uses 100.64.0.0/10 (CGNAT) — detect by IP range
+      if (addr.address.startsWith("100.")) {
+        const second = parseInt(addr.address.split(".")[1], 10);
+        if (second >= 64 && second <= 127) {
+          tailscaleIp = addr.address;
+          continue;
+        }
+      }
+
+      if (!lanIp) lanIp = addr.address;
+    }
+  }
+
+  if (lanIp) result.push({ label: "LAN", ip: lanIp });
+  if (tailscaleIp) result.push({ label: "Tailscale", ip: tailscaleIp });
+
+  return result;
+}
+
+/**
+ * Regenerate the auth token — creates a new random token, persists it,
+ * and returns the new value.  Existing sessions using the old token will
+ * be invalidated on their next request.
+ */
+export function regenerateToken(): string {
+  const token = randomBytes(TOKEN_BYTES).toString("hex");
+  const data: AuthData = { token, createdAt: Date.now() };
+  try {
+    mkdirSync(dirname(AUTH_FILE), { recursive: true });
+    writeFileSync(AUTH_FILE, JSON.stringify(data, null, 2), { mode: 0o600 });
+  } catch (err) {
+    console.error("[auth] Failed to persist regenerated token:", err);
+  }
+  cachedToken = token;
+  return token;
+}
+
 /** Reset cached state — for testing only */
 export function _resetForTest(): void {
   cachedToken = null;

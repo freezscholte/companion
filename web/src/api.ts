@@ -611,6 +611,24 @@ export async function createSessionStream(
  * Verify an auth token with the server.
  * This does NOT use the auth header helpers since it's called before auth is established.
  */
+/**
+ * Attempt auto-authentication for localhost users.
+ * The server returns the token if the request comes from 127.0.0.1/::1.
+ * No auth header needed — this is a pre-auth endpoint.
+ */
+export async function autoAuth(): Promise<string | null> {
+  try {
+    const res = await fetch(`${BASE}/auth/auto`);
+    if (res.ok) {
+      const data = await res.json() as { ok: boolean; token?: string };
+      if (data.ok && data.token) return data.token;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function verifyAuthToken(token: string): Promise<boolean> {
   try {
     const res = await fetch(`${BASE}/auth/verify`, {
@@ -631,7 +649,11 @@ export async function verifyAuthToken(token: string): Promise<boolean> {
 export const api = {
   // Auth
   getAuthQr: () =>
-    get<{ qrDataUrl: string; loginUrl: string }>("/auth/qr"),
+    get<{ qrCodes: { label: string; url: string; qrDataUrl: string }[] }>("/auth/qr"),
+  getAuthToken: () =>
+    get<{ token: string }>("/auth/token"),
+  regenerateAuthToken: () =>
+    post<{ token: string }>("/auth/regenerate"),
 
   createSession: (opts?: CreateSessionOpts) =>
     post<{ sessionId: string; state: string; cwd: string }>(
