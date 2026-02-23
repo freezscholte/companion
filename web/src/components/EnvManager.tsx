@@ -344,7 +344,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
           {loading ? (
             <div className="py-12 text-center text-sm text-cc-muted">Loading environments...</div>
           ) : envs.length === 0 ? (
-            <EnvEmptyState onCreateClick={() => setShowCreate(true)} />
+            <EnvEmptyState />
           ) : (
             <div className="space-y-1">
               {envs.map((env) => {
@@ -855,7 +855,7 @@ function EnvRow({ env, varCount, onStartEdit, onDelete }: EnvRowProps) {
 
 /* ─── Empty State ─────────────────────────────────────────────────── */
 
-function EnvEmptyState({ onCreateClick }: { onCreateClick: () => void }) {
+function EnvEmptyState() {
   return (
     <div className="py-16 flex flex-col items-center text-center">
       <div className="w-12 h-12 rounded-full bg-cc-primary/10 flex items-center justify-center mb-4">
@@ -864,15 +864,9 @@ function EnvEmptyState({ onCreateClick }: { onCreateClick: () => void }) {
         </svg>
       </div>
       <p className="text-sm text-cc-fg font-medium mb-1">No environments yet</p>
-      <p className="text-xs text-cc-muted mb-5 max-w-xs">
+      <p className="text-xs text-cc-muted max-w-xs">
         Environments let you define variables, Docker settings, and init scripts for your sessions.
       </p>
-      <button
-        onClick={onCreateClick}
-        className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-cc-primary hover:bg-cc-primary-hover text-white transition-colors cursor-pointer"
-      >
-        Create your first environment
-      </button>
     </div>
   );
 }
