@@ -155,11 +155,13 @@ export interface LaunchOptions {
 
 /**
  * Manages CLI backend processes (Claude Code via --sdk-url WebSocket,
- * or Codex via app-server stdio).
+ * or Codex via app-server stdio/WebSocket).
  */
 export class CliLauncher {
   private sessions = new Map<string, SdkSessionInfo>();
   private processes = new Map<string, Subprocess>();
+  /** Sidecar Node proxy processes used by Codex WebSocket transport. */
+  private codexWsProxies = new Map<string, Subprocess>();
   /** Runtime-only env vars per session (kept out of persisted launcher state). */
   private sessionEnvs = new Map<string, Record<string, string>>();
   private port: number;
@@ -295,6 +297,18 @@ export class CliLauncher {
     if (!info) return { ok: false, error: "Session not found" };
 
     // Kill old process if still alive
+    const oldProxy = this.codexWsProxies.get(sessionId);
+    if (oldProxy) {
+      try {
+        oldProxy.kill("SIGTERM");
+        await Promise.race([
+          oldProxy.exited,
+          new Promise((r) => setTimeout(r, 2000)),
+        ]);
+      } catch {}
+      this.codexWsProxies.delete(sessionId);
+    }
+
     const oldProc = this.processes.get(sessionId);
     if (oldProc) {
       try {
@@ -563,7 +577,7 @@ export class CliLauncher {
 
   /**
    * Spawn a Codex app-server subprocess for a session.
-   * Unlike Claude Code (which connects back via WebSocket), Codex uses stdio.
+   * Transport (stdio vs WebSocket) is selected by `COMPANION_CODEX_TRANSPORT`.
    */
   private prepareCodexHome(codexHome: string): void {
     mkdirSync(codexHome, { recursive: true });
@@ -726,7 +740,7 @@ export class CliLauncher {
     this.pipeOutput(sessionId, proc);
 
     // Store WS metadata
-    const wsUrl = isContainerized ? `ws://127.0.0.1:${wsPort}` : `ws://127.0.0.1:${wsPort}`;
+    const wsUrl = `ws://127.0.0.1:${wsPort}`;
     info.codexWsPort = wsPort;
     info.codexWsUrl = wsUrl;
 
@@ -735,7 +749,8 @@ export class CliLauncher {
     // runtime compatibility issue where the `ws` client can mis-handle a valid
     // 101 upgrade response from Codex's Rust WS server.
     const codexBinaryDir = isContainerized ? undefined : resolve(binary, "..");
-    const proxyNode = codexBinaryDir ? join(codexBinaryDir, "node") : "node";
+    const proxyNodeCandidate = codexBinaryDir ? join(codexBinaryDir, "node") : undefined;
+    const proxyNode = proxyNodeCandidate && existsSync(proxyNodeCandidate) ? proxyNodeCandidate : "node";
     const proxyProc = Bun.spawn([proxyNode, CODEX_WS_PROXY_PATH, wsUrl, "10000"], {
       cwd: info.cwd,
       env: {
@@ -746,6 +761,7 @@ export class CliLauncher {
       stdout: "pipe",
       stderr: "pipe",
     });
+    this.codexWsProxies.set(sessionId, proxyProc);
     // proxy stdout is the JSON-RPC protocol stream (consumed by CodexAdapter).
     // Only pipe stderr for diagnostics to avoid locking stdout.
     const proxyStderr = proxyProc.stderr;
@@ -779,6 +795,8 @@ export class CliLauncher {
     // Handle init errors
     adapter.onInitError((error) => {
       console.error(`[cli-launcher] Codex WS session ${sessionId} init failed: ${error}`);
+      try { proxyProc.kill("SIGTERM"); } catch {}
+      this.codexWsProxies.delete(sessionId);
       const session = this.sessions.get(sessionId);
       if (session) {
         session.state = "exited";
@@ -809,6 +827,7 @@ export class CliLauncher {
         session.exitCode = exitCode;
       }
       this.processes.delete(sessionId);
+      this.codexWsProxies.delete(sessionId);
       this.persistState();
       for (const handler of this.exitHandlers) {
         try { handler(sessionId, exitCode); } catch {}
@@ -1019,8 +1038,14 @@ export class CliLauncher {
    * Kill a session's CLI process.
    */
   async kill(sessionId: string): Promise<boolean> {
+    const proxy = this.codexWsProxies.get(sessionId);
+    if (proxy) {
+      try { proxy.kill("SIGTERM"); } catch {}
+      this.codexWsProxies.delete(sessionId);
+    }
+
     const proc = this.processes.get(sessionId);
-    if (!proc) return false;
+    if (!proc) return !!proxy;
 
     proc.kill("SIGTERM");
 
@@ -1084,6 +1109,7 @@ export class CliLauncher {
   removeSession(sessionId: string) {
     this.sessions.delete(sessionId);
     this.processes.delete(sessionId);
+    this.codexWsProxies.delete(sessionId);
     this.sessionEnvs.delete(sessionId);
     this.persistState();
   }
@@ -1097,6 +1123,7 @@ export class CliLauncher {
       if (session.state === "exited") {
         this.sessions.delete(id);
         this.sessionEnvs.delete(id);
+        this.codexWsProxies.delete(id);
         pruned++;
       }
     }
