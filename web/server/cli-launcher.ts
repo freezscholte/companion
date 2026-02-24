@@ -7,6 +7,7 @@ import {
   realpathSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Subprocess } from "bun";
 import type { SessionStore } from "./session-store.js";
 import type { BackendType } from "./session-types.js";
@@ -18,6 +19,34 @@ import {
   getLegacyCodexHome,
   resolveCompanionCodexSessionHome,
 } from "./codex-home.js";
+
+/** Whether WebSocket transport is enabled for Codex sessions. */
+function isCodexWsTransportEnabled(): boolean {
+  const val = (process.env.COMPANION_CODEX_TRANSPORT || "ws").toLowerCase();
+  return val === "ws" || val === "websocket";
+}
+
+/** Find a free TCP port in the given range by attempting to listen on each. */
+async function findFreePort(start = 4500, end = 4600): Promise<number> {
+  for (let port = start; port <= end; port++) {
+    try {
+      const server = Bun.listen({
+        hostname: "127.0.0.1",
+        port,
+        socket: {
+          data() {},
+          open() {},
+          close() {},
+        },
+      });
+      server.stop(true);
+      return port;
+    } catch {
+      // Port in use, try next
+    }
+  }
+  throw new Error(`No free port found in range ${start}-${end}`);
+}
 
 function sanitizeSpawnArgsForLog(args: string[]): string {
   const secretKeyPattern = /(token|key|secret|password)/i;
@@ -36,6 +65,8 @@ function sanitizeSpawnArgsForLog(args: string[]): string {
   }
   return out.join(" ");
 }
+
+const CODEX_WS_PROXY_PATH = fileURLToPath(new URL("./codex-ws-proxy.cjs", import.meta.url));
 
 export interface SdkSessionInfo {
   sessionId: string;
@@ -75,6 +106,12 @@ export interface SdkSessionInfo {
   resumeSessionAt?: string;
   /** Whether the resumed session used --fork-session. */
   forkSession?: boolean;
+
+  // Codex WebSocket transport fields
+  /** Port used for Codex WebSocket transport (host mode). */
+  codexWsPort?: number;
+  /** Full WebSocket URL for the Codex app-server. */
+  codexWsUrl?: string;
 
   // Container fields
   /** Docker container ID when session runs inside a container */
@@ -566,6 +603,241 @@ export class CliLauncher {
   }
 
   private spawnCodex(sessionId: string, info: SdkSessionInfo, options: LaunchOptions): void {
+    const useWs = isCodexWsTransportEnabled();
+    if (useWs) {
+      this.spawnCodexWs(sessionId, info, options);
+    } else {
+      this.spawnCodexStdio(sessionId, info, options);
+    }
+  }
+
+  /**
+   * Spawn Codex with WebSocket transport.
+   * Codex listens on `ws://127.0.0.1:PORT`, Companion connects as a client.
+   */
+  private async spawnCodexWs(sessionId: string, info: SdkSessionInfo, options: LaunchOptions): Promise<void> {
+    const isContainerized = !!options.containerId;
+
+    let binary = options.codexBinary || "codex";
+    if (!isContainerized) {
+      const resolved = resolveBinary(binary);
+      if (resolved) {
+        binary = resolved;
+      } else {
+        console.error(`[cli-launcher] Binary "${binary}" not found in PATH`);
+        info.state = "exited";
+        info.exitCode = 127;
+        this.persistState();
+        return;
+      }
+    }
+
+    // Find a free port for Codex to listen on
+    let wsPort: number;
+    try {
+      wsPort = await findFreePort(4500, 4600);
+    } catch (err) {
+      console.error(`[cli-launcher] Failed to find free port for Codex WS: ${err}`);
+      info.state = "exited";
+      info.exitCode = 1;
+      this.persistState();
+      return;
+    }
+
+    const listenAddr = isContainerized ? `ws://0.0.0.0:${wsPort}` : `ws://127.0.0.1:${wsPort}`;
+
+    const args: string[] = ["app-server", "--listen", listenAddr];
+    const internetEnabled = options.codexInternetAccess !== false;
+    args.push("-c", `tools.webSearch=${internetEnabled ? "true" : "false"}`);
+    const codexHome = resolveCompanionCodexSessionHome(
+      sessionId,
+      options.codexHome,
+    );
+    if (!isContainerized) {
+      this.prepareCodexHome(codexHome);
+    }
+
+    let spawnCmd: string[];
+    let spawnEnv: Record<string, string | undefined>;
+    let spawnCwd: string | undefined;
+
+    if (isContainerized) {
+      // Run Codex inside the container via docker exec -d (detached, no stdin pipe needed)
+      const dockerArgs = ["docker", "exec", "-d"];
+      if (options.env) {
+        for (const [k, v] of Object.entries(options.env)) {
+          dockerArgs.push("-e", `${k}=${v}`);
+        }
+      }
+      dockerArgs.push("-e", "CLAUDECODE=");
+      dockerArgs.push("-e", "CODEX_HOME=/root/.codex");
+      dockerArgs.push(options.containerId!);
+      const innerCmd = [binary, ...args].map(a => `'${a.replace(/'/g, "'\\''")}'`).join(" ");
+      dockerArgs.push("bash", "-lc", innerCmd);
+
+      spawnCmd = dockerArgs;
+      spawnEnv = { ...process.env, PATH: getEnrichedPath() };
+      spawnCwd = undefined;
+    } else {
+      const binaryDir = resolve(binary, "..");
+      const siblingNode = join(binaryDir, "node");
+      const enrichedPath = getEnrichedPath();
+      const spawnPath = [binaryDir, ...enrichedPath.split(":")].filter(Boolean).join(":");
+
+      if (existsSync(siblingNode)) {
+        let codexScript: string;
+        try {
+          codexScript = realpathSync(binary);
+        } catch {
+          codexScript = binary;
+        }
+        spawnCmd = [siblingNode, codexScript, ...args];
+      } else {
+        spawnCmd = [binary, ...args];
+      }
+
+      spawnEnv = {
+        ...process.env,
+        CLAUDECODE: undefined,
+        ...options.env,
+        CODEX_HOME: codexHome,
+        PATH: spawnPath,
+      };
+      spawnCwd = info.cwd;
+    }
+
+    console.log(
+      `[cli-launcher] Spawning Codex WS session ${sessionId}${isContainerized ? " (container)" : ""}: ` +
+      sanitizeSpawnArgsForLog(spawnCmd),
+    );
+
+    const proc = Bun.spawn(spawnCmd, {
+      cwd: spawnCwd,
+      env: spawnEnv,
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    info.pid = proc.pid;
+    this.processes.set(sessionId, proc);
+
+    // Pipe stdout/stderr for debugging (JSON-RPC goes over WebSocket now)
+    this.pipeOutput(sessionId, proc);
+
+    // Store WS metadata
+    const wsUrl = isContainerized ? `ws://127.0.0.1:${wsPort}` : `ws://127.0.0.1:${wsPort}`;
+    info.codexWsPort = wsPort;
+    info.codexWsUrl = wsUrl;
+
+    // Connect to Codex app-server through a Node helper process that uses the
+    // `ws` package directly (with perMessageDeflate disabled). This avoids a Bun
+    // runtime compatibility issue where the `ws` client can mis-handle a valid
+    // 101 upgrade response from Codex's Rust WS server.
+    const codexBinaryDir = isContainerized ? undefined : resolve(binary, "..");
+    const proxyNode = codexBinaryDir ? join(codexBinaryDir, "node") : "node";
+    const proxyProc = Bun.spawn([proxyNode, CODEX_WS_PROXY_PATH, wsUrl, "10000"], {
+      cwd: info.cwd,
+      env: {
+        ...process.env,
+        PATH: getEnrichedPath(),
+      },
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    // proxy stdout is the JSON-RPC protocol stream (consumed by CodexAdapter).
+    // Only pipe stderr for diagnostics to avoid locking stdout.
+    const proxyStderr = proxyProc.stderr;
+    if (proxyStderr && typeof proxyStderr !== "number") {
+      this.pipeStream(sessionId, proxyStderr, "stderr");
+    }
+
+    // Create CodexAdapter using stdio transport to the proxy process.
+    const adapter = new CodexAdapter(proxyProc, sessionId, {
+      model: options.model,
+      cwd: info.cwd,
+      executionCwd: options.containerId ? (info.containerCwd || "/workspace") : info.cwd,
+      approvalMode: options.permissionMode,
+      threadId: info.cliSessionId,
+      sandbox: options.codexSandbox,
+      recorder: this.recorder ?? undefined,
+      killProcess: async () => {
+        try {
+          proxyProc.kill("SIGTERM");
+        } catch {}
+        try {
+          proc.kill("SIGTERM");
+        } catch {}
+        await Promise.race([
+          Promise.allSettled([proxyProc.exited, proc.exited]),
+          new Promise((r) => setTimeout(r, 5000)),
+        ]);
+      },
+    });
+
+    // Handle init errors
+    adapter.onInitError((error) => {
+      console.error(`[cli-launcher] Codex WS session ${sessionId} init failed: ${error}`);
+      const session = this.sessions.get(sessionId);
+      if (session) {
+        session.state = "exited";
+        session.exitCode = 1;
+        session.cliSessionId = undefined;
+      }
+      this.persistState();
+    });
+
+    // Notify the WsBridge to attach this adapter
+    if (this.onCodexAdapter) {
+      this.onCodexAdapter(sessionId, adapter);
+    }
+
+    info.state = "connected";
+
+    // Monitor the proxy connection process as the primary transport liveness.
+    // In container mode, `docker exec -d` exits immediately after launching Codex
+    // and must not be treated as the backend process lifetime.
+    let exitHandled = false;
+    const handleWsSessionExit = (exitCode: number | null, source: "proxy" | "codex") => {
+      if (exitHandled) return;
+      exitHandled = true;
+      console.log(`[cli-launcher] Codex WS session ${sessionId} exited via ${source} (code=${exitCode})`);
+      const session = this.sessions.get(sessionId);
+      if (session) {
+        session.state = "exited";
+        session.exitCode = exitCode;
+      }
+      this.processes.delete(sessionId);
+      this.persistState();
+      for (const handler of this.exitHandlers) {
+        try { handler(sessionId, exitCode); } catch {}
+      }
+    };
+
+    proxyProc.exited.then((exitCode) => {
+      handleWsSessionExit(exitCode, "proxy");
+    });
+
+    if (!isContainerized) {
+      proc.exited.then((exitCode) => {
+        handleWsSessionExit(exitCode, "codex");
+      });
+    } else {
+      proc.exited.then((exitCode) => {
+        // `docker exec -d` exits after launch; useful for debugging only.
+        console.log(`[cli-launcher] Codex WS launcher command for ${sessionId} exited (code=${exitCode})`);
+      });
+    }
+
+    this.persistState();
+  }
+
+  /**
+   * Spawn Codex with stdio transport (legacy).
+   * Unlike Claude Code (which connects back via WebSocket), Codex uses stdin/stdout.
+   */
+  private spawnCodexStdio(sessionId: string, info: SdkSessionInfo, options: LaunchOptions): void {
     const isContainerized = !!options.containerId;
 
     let binary = options.codexBinary || "codex";
@@ -618,11 +890,6 @@ export class CliLauncher {
       spawnCwd = undefined;
     } else {
       // Host-based spawn — resolve node/shebang issues
-      // The codex binary is a Node.js script with `#!/usr/bin/env node` shebang.
-      // When Bun.spawn executes it, the kernel resolves `node` via /usr/bin/env
-      // which may find the system Node (e.g. v12) instead of the nvm-managed one.
-      // To guarantee the correct Node version, we resolve the `node` binary that
-      // lives alongside `codex` and spawn `node <codex.js>` directly.
       const binaryDir = resolve(binary, "..");
       const siblingNode = join(binaryDir, "node");
       const enrichedPath = getEnrichedPath();
@@ -707,7 +974,6 @@ export class CliLauncher {
     info.state = "connected";
 
     // Monitor process exit
-    const spawnedAt = Date.now();
     proc.exited.then((exitCode) => {
       console.log(`[cli-launcher] Codex session ${sessionId} exited (code=${exitCode})`);
       const session = this.sessions.get(sessionId);
@@ -724,7 +990,6 @@ export class CliLauncher {
 
     this.persistState();
   }
-
 
   /**
    * Mark a session as connected (called when CLI establishes WS connection).
