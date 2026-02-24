@@ -648,7 +648,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
           </div>
 
           {/* Mobile action row (hidden on sm+) */}
-          <div className="flex items-center gap-1 px-3 pb-1 sm:hidden">
+          <div className="flex items-center justify-end gap-1 px-3 pb-1 sm:hidden">
             {/* Send/stop */}
             {isRunning ? (
               <button
