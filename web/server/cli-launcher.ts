@@ -296,7 +296,10 @@ export class CliLauncher {
     const info = this.sessions.get(sessionId);
     if (!info) return { ok: false, error: "Session not found" };
 
-    // Kill old process if still alive
+    // Kill old process(es) if still alive.
+    // Snapshot both handles first because killing the proxy can trigger the
+    // WS session exit handler, which clears `this.processes`.
+    const oldProc = this.processes.get(sessionId);
     const oldProxy = this.codexWsProxies.get(sessionId);
     if (oldProxy) {
       try {
@@ -308,8 +311,6 @@ export class CliLauncher {
       } catch {}
       this.codexWsProxies.delete(sessionId);
     }
-
-    const oldProc = this.processes.get(sessionId);
     if (oldProc) {
       try {
         oldProc.kill("SIGTERM");
