@@ -25,6 +25,7 @@ import { registerFsRoutes } from "./routes/fs-routes.js";
 import { registerSkillRoutes } from "./routes/skills-routes.js";
 import { registerEnvRoutes } from "./routes/env-routes.js";
 import { registerCronRoutes } from "./routes/cron-routes.js";
+import { registerAgentRoutes } from "./routes/agent-routes.js";
 import { registerPromptRoutes } from "./routes/prompt-routes.js";
 import { registerSettingsRoutes } from "./routes/settings-routes.js";
 import { registerGitRoutes } from "./routes/git-routes.js";
@@ -54,6 +55,7 @@ export function createRoutes(
   prPoller?: import("./pr-poller.js").PRPoller,
   recorder?: import("./recorder.js").RecorderManager,
   cronScheduler?: import("./cron-scheduler.js").CronScheduler,
+  agentExecutor?: import("./agent-executor.js").AgentExecutor,
 ) {
   const api = new Hono();
 
@@ -1427,6 +1429,7 @@ export function createRoutes(
 
   registerSkillRoutes(api);
   registerCronRoutes(api, cronScheduler);
+  registerAgentRoutes(api, agentExecutor);
 
   // ─── Worktree cleanup helper ────────────────────────────────────
 

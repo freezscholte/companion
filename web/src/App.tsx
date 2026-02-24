@@ -25,6 +25,7 @@ const LinearSettingsPage = lazy(() => import("./components/LinearSettingsPage.js
 const PromptsPage = lazy(() => import("./components/PromptsPage.js").then((m) => ({ default: m.PromptsPage })));
 const EnvManager = lazy(() => import("./components/EnvManager.js").then((m) => ({ default: m.EnvManager })));
 const CronManager = lazy(() => import("./components/CronManager.js").then((m) => ({ default: m.CronManager })));
+const AgentsPage = lazy(() => import("./components/AgentsPage.js").then((m) => ({ default: m.AgentsPage })));
 const TerminalPage = lazy(() => import("./components/TerminalPage.js").then((m) => ({ default: m.TerminalPage })));
 const ProcessPanel = lazy(() => import("./components/ProcessPanel.js").then((m) => ({ default: m.ProcessPanel })));
 
@@ -67,6 +68,7 @@ export default function App() {
   const isTerminalPage = route.page === "terminal";
   const isEnvironmentsPage = route.page === "environments";
   const isScheduledPage = route.page === "scheduled";
+  const isAgentsPage = route.page === "agents" || route.page === "agent-detail";
   const isSessionView = route.page === "session" || route.page === "home";
 
   useEffect(() => {
@@ -223,6 +225,12 @@ export default function App() {
           {isScheduledPage && (
             <div className="absolute inset-0">
               <Suspense fallback={<LazyFallback />}><CronManager embedded /></Suspense>
+            </div>
+          )}
+
+          {isAgentsPage && (
+            <div className="absolute inset-0">
+              <Suspense fallback={<LazyFallback />}><AgentsPage route={route} /></Suspense>
             </div>
           )}
 
