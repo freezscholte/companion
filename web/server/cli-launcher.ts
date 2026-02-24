@@ -67,6 +67,7 @@ function sanitizeSpawnArgsForLog(args: string[]): string {
 }
 
 const CODEX_WS_PROXY_PATH = fileURLToPath(new URL("./codex-ws-proxy.cjs", import.meta.url));
+const CODEX_CONTAINER_WS_PORT = Number(process.env.COMPANION_CODEX_CONTAINER_WS_PORT || "4502");
 
 export interface SdkSessionInfo {
   sessionId: string;
@@ -651,19 +652,41 @@ export class CliLauncher {
       }
     }
 
-    // Find a free port for Codex to listen on
-    let wsPort: number;
-    try {
-      wsPort = await findFreePort(4500, 4600);
-    } catch (err) {
-      console.error(`[cli-launcher] Failed to find free port for Codex WS: ${err}`);
-      info.state = "exited";
-      info.exitCode = 1;
-      this.persistState();
-      return;
+    // Host mode: choose a free host port. Container mode: use a fixed container port
+    // and connect via the container's mapped host port.
+    let codexListenPort: number;
+    let proxyConnectPort: number;
+    if (isContainerized) {
+      codexListenPort = CODEX_CONTAINER_WS_PORT;
+      const containerInfo = containerManager.getContainerById(options.containerId!);
+      const mappedPort = containerInfo?.portMappings.find((p) => p.containerPort === CODEX_CONTAINER_WS_PORT)?.hostPort;
+      if (!mappedPort) {
+        console.error(
+          `[cli-launcher] Missing port mapping for Codex container port ${CODEX_CONTAINER_WS_PORT} ` +
+          `on container ${options.containerId}`,
+        );
+        info.state = "exited";
+        info.exitCode = 1;
+        this.persistState();
+        return;
+      }
+      proxyConnectPort = mappedPort;
+    } else {
+      try {
+        proxyConnectPort = await findFreePort(4500, 4600);
+      } catch (err) {
+        console.error(`[cli-launcher] Failed to find free port for Codex WS: ${err}`);
+        info.state = "exited";
+        info.exitCode = 1;
+        this.persistState();
+        return;
+      }
+      codexListenPort = proxyConnectPort;
     }
 
-    const listenAddr = isContainerized ? `ws://0.0.0.0:${wsPort}` : `ws://127.0.0.1:${wsPort}`;
+    const listenAddr = isContainerized
+      ? `ws://0.0.0.0:${codexListenPort}`
+      : `ws://127.0.0.1:${codexListenPort}`;
 
     const args: string[] = ["app-server", "--listen", listenAddr];
     const internetEnabled = options.codexInternetAccess !== false;
@@ -745,8 +768,8 @@ export class CliLauncher {
     this.pipeOutput(sessionId, proc);
 
     // Store WS metadata
-    const wsUrl = `ws://127.0.0.1:${wsPort}`;
-    info.codexWsPort = wsPort;
+    const wsUrl = `ws://127.0.0.1:${proxyConnectPort}`;
+    info.codexWsPort = proxyConnectPort;
     info.codexWsUrl = wsUrl;
 
     // Connect to Codex app-server through a Node helper process that uses the

@@ -17,11 +17,13 @@ vi.mock("./path-resolver.js", () => ({ resolveBinary: mockResolveBinary, getEnri
 const mockIsContainerAlive = vi.hoisted(() => vi.fn((): "running" | "stopped" | "missing" => "running"));
 const mockHasBinaryInContainer = vi.hoisted(() => vi.fn((): boolean => true));
 const mockStartContainer = vi.hoisted(() => vi.fn());
+const mockGetContainerById = vi.hoisted(() => vi.fn((_containerId: string) => undefined as any));
 vi.mock("./container-manager.js", () => ({
   containerManager: {
     isContainerAlive: mockIsContainerAlive,
     hasBinaryInContainer: mockHasBinaryInContainer,
     startContainer: mockStartContainer,
+    getContainerById: mockGetContainerById,
   },
 }));
 
@@ -152,6 +154,7 @@ beforeEach(() => {
   mockSpawn.mockReturnValue(createMockProc());
   mockListen.mockImplementation(() => ({ stop: vi.fn() }));
   mockResolveBinary.mockReturnValue("/usr/bin/claude");
+  mockGetContainerById.mockReturnValue(undefined);
 });
 
 afterEach(() => {
@@ -951,6 +954,15 @@ describe("codex websocket launcher", () => {
     // In container WS mode, docker exec -d exits immediately after launching Codex.
     // The session must remain alive until the proxy (actual transport) exits.
     process.env.COMPANION_CODEX_TRANSPORT = "ws";
+    mockGetContainerById.mockReturnValue({
+      containerId: "abc123def456",
+      name: "companion-codex",
+      image: "the-companion:latest",
+      portMappings: [{ containerPort: 4502, hostPort: 55021 }],
+      hostCwd: "/tmp/project",
+      containerCwd: "/workspace",
+      state: "running",
+    });
 
     let resolveLauncherProc!: (code: number) => void;
     const detachedLauncherProc = {
@@ -975,6 +987,14 @@ describe("codex websocket launcher", () => {
     });
 
     await new Promise((r) => setTimeout(r, 0));
+
+    const [codexCmd] = mockSpawn.mock.calls[0];
+    const codexBashCmd = codexCmd[codexCmd.length - 1];
+    expect(codexBashCmd).toContain("--listen");
+    expect(codexBashCmd).toContain("ws://0.0.0.0:4502");
+
+    const [proxyCmd] = mockSpawn.mock.calls[1];
+    expect(proxyCmd[2]).toBe("ws://127.0.0.1:55021");
 
     resolveLauncherProc(0);
     await new Promise((r) => setTimeout(r, 0));

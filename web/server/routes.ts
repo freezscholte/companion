@@ -40,6 +40,7 @@ const UPDATE_CHECK_STALE_MS = 5 * 60 * 1000;
 const ROUTES_DIR = dirname(fileURLToPath(import.meta.url));
 const WEB_DIR = dirname(ROUTES_DIR);
 const VSCODE_EDITOR_CONTAINER_PORT = 13337;
+const CODEX_APP_SERVER_CONTAINER_PORT = Number(process.env.COMPANION_CODEX_CONTAINER_WS_PORT || "4502");
 const VSCODE_EDITOR_HOST_PORT = Number(process.env.COMPANION_EDITOR_PORT || "13338");
 
 function shellEscapeArg(value: string): string {
@@ -297,7 +298,11 @@ export function createRoutes(
             ? body.container.ports.map(Number).filter((n: number) => n > 0)
             : []);
         const containerPorts = Array.from(
-          new Set([...requestedPorts, VSCODE_EDITOR_CONTAINER_PORT]),
+          new Set([
+            ...requestedPorts,
+            VSCODE_EDITOR_CONTAINER_PORT,
+            ...(backend === "codex" ? [CODEX_APP_SERVER_CONTAINER_PORT] : []),
+          ]),
         );
         const cConfig: ContainerConfig = {
           image: effectiveImage,
@@ -589,7 +594,11 @@ export function createRoutes(
               ? body.container.ports.map(Number).filter((n: number) => n > 0)
               : []);
           const containerPorts = Array.from(
-            new Set([...requestedPorts, VSCODE_EDITOR_CONTAINER_PORT]),
+            new Set([
+              ...requestedPorts,
+              VSCODE_EDITOR_CONTAINER_PORT,
+              ...(backend === "codex" ? [CODEX_APP_SERVER_CONTAINER_PORT] : []),
+            ]),
           );
           const cConfig: ContainerConfig = {
             image: effectiveImage,
