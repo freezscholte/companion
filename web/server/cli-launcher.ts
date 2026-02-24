@@ -845,8 +845,11 @@ export class CliLauncher {
       });
     } else {
       proc.exited.then((exitCode) => {
-        // `docker exec -d` exits after launch; useful for debugging only.
-        console.log(`[cli-launcher] Codex WS launcher command for ${sessionId} exited (code=${exitCode})`);
+        // `docker exec -d` exits immediately after launch in container WS mode.
+        // Suppress the expected success case to avoid noisy logs; keep non-zero exits.
+        if (exitCode !== 0) {
+          console.warn(`[cli-launcher] Codex WS launcher command for ${sessionId} exited (code=${exitCode})`);
+        }
       });
     }
 
