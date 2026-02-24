@@ -13,4 +13,5 @@ web/.env.local
 .dev-*.log
 docs/mocks/
 docs/repo-only/
+scripts/test-codex-*.ts
 web/dev-dist/
