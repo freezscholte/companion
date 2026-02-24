@@ -78,6 +78,8 @@ export function Sidebar() {
   const [editingName, setEditingName] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [hash, setHash] = useState(() => (typeof window !== "undefined" ? window.location.hash : ""));
   const editInputRef = useRef<HTMLInputElement>(null);
   const sessions = useStore((s) => s.sessions);
@@ -184,8 +186,12 @@ export function Sidebar() {
     setEditingName(currentName);
   }
 
-  const handleDeleteSession = useCallback(async (e: React.MouseEvent, sessionId: string) => {
+  const handleDeleteSession = useCallback((e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
+    setConfirmDeleteId(sessionId);
+  }, []);
+
+  const doDelete = useCallback(async (sessionId: string) => {
     try {
       disconnectSession(sessionId);
       await api.deleteSession(sessionId);
@@ -197,6 +203,41 @@ export function Sidebar() {
     }
     removeSession(sessionId);
   }, [removeSession]);
+
+  const confirmDelete = useCallback(() => {
+    if (confirmDeleteId) {
+      doDelete(confirmDeleteId);
+      setConfirmDeleteId(null);
+    }
+  }, [confirmDeleteId, doDelete]);
+
+  const cancelDelete = useCallback(() => {
+    setConfirmDeleteId(null);
+  }, []);
+
+  const handleDeleteAllArchived = useCallback(() => {
+    setConfirmDeleteAll(true);
+  }, []);
+
+  const confirmDeleteAllArchived = useCallback(async () => {
+    setConfirmDeleteAll(false);
+    // Get fresh list of archived session IDs
+    const store = useStore.getState();
+    const allIds = new Set<string>();
+    for (const id of store.sessions.keys()) allIds.add(id);
+    for (const s of store.sdkSessions) allIds.add(s.sessionId);
+    const archivedIds = Array.from(allIds).filter((id) => {
+      const sdkInfo = store.sdkSessions.find((s) => s.sessionId === id);
+      return sdkInfo?.archived ?? false;
+    });
+    for (const id of archivedIds) {
+      await doDelete(id);
+    }
+  }, [doDelete]);
+
+  const cancelDeleteAll = useCallback(() => {
+    setConfirmDeleteAll(false);
+  }, []);
 
   const handleArchiveSession = useCallback((e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
@@ -468,16 +509,27 @@ export function Sidebar() {
             )}
 
             {archivedSessions.length > 0 && (
-              <div className="mt-2 pt-2">
-                <button
-                  onClick={() => setShowArchived(!showArchived)}
-                  className="w-full px-3 py-1.5 text-[11px] font-medium text-cc-muted uppercase tracking-wider flex items-center gap-1.5 hover:text-cc-fg transition-colors cursor-pointer"
-                >
-                  <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 transition-transform ${showArchived ? "rotate-90" : ""}`}>
-                    <path d="M6 4l4 4-4 4" />
-                  </svg>
-                  Archived ({archivedSessions.length})
-                </button>
+              <div className="mt-2 pt-2 border-t border-cc-border/50">
+                <div className="flex items-center">
+                  <button
+                    onClick={() => setShowArchived(!showArchived)}
+                    className="flex-1 px-3 py-1.5 text-[11px] font-medium text-cc-muted uppercase tracking-wider flex items-center gap-1.5 hover:text-cc-fg transition-colors cursor-pointer"
+                  >
+                    <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 transition-transform ${showArchived ? "rotate-90" : ""}`}>
+                      <path d="M6 4l4 4-4 4" />
+                    </svg>
+                    Archived ({archivedSessions.length})
+                  </button>
+                  {showArchived && archivedSessions.length > 1 && (
+                    <button
+                      onClick={handleDeleteAllArchived}
+                      className="px-2 py-1 mr-1 text-[10px] text-red-400 hover:text-red-500 hover:bg-red-500/10 rounded-md transition-colors cursor-pointer"
+                      title="Delete all archived sessions"
+                    >
+                      Delete all
+                    </button>
+                  )}
+                </div>
                 {showArchived && (
                   <div className="space-y-0.5 mt-1">
                     {archivedSessions.map((s) => (
@@ -550,6 +602,55 @@ export function Sidebar() {
           })}
         </div>
       </div>
+
+      {/* Delete confirmation modal */}
+      {(confirmDeleteId || confirmDeleteAll) && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-[fadeIn_150ms_ease-out]"
+          onClick={confirmDeleteAll ? cancelDeleteAll : cancelDelete}
+        >
+          <div
+            className="mx-4 w-full max-w-[280px] bg-cc-card border border-cc-border rounded-xl shadow-2xl p-5 animate-[menu-appear_150ms_ease-out]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Icon */}
+            <div className="flex justify-center mb-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-5 h-5 text-red-400">
+                  <path d="M5.5 5.5A.5.5 0 016 6v6a.5.5 0 01-1 0V6a.5.5 0 01.5-.5zm2.5 0a.5.5 0 01.5.5v6a.5.5 0 01-1 0V6a.5.5 0 01.5-.5zm3 .5a.5.5 0 00-1 0v6a.5.5 0 001 0V6z" />
+                  <path fillRule="evenodd" d="M14.5 3a1 1 0 01-1 1H13v9a2 2 0 01-2 2H5a2 2 0 01-2-2V4h-.5a1 1 0 010-2H6a1 1 0 011-1h2a1 1 0 011 1h3.5a1 1 0 011 1zM4.118 4L4 4.059V13a1 1 0 001 1h6a1 1 0 001-1V4.059L11.882 4H4.118zM6 2h4v1H6V2z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Text */}
+            <h3 className="text-[13px] font-semibold text-cc-fg text-center">
+              {confirmDeleteAll ? "Delete all archived?" : "Delete session?"}
+            </h3>
+            <p className="text-[12px] text-cc-muted text-center mt-1.5 leading-relaxed">
+              {confirmDeleteAll
+                ? `This will permanently delete ${archivedSessions.length} archived session${archivedSessions.length === 1 ? "" : "s"}. This cannot be undone.`
+                : "This will permanently delete this session and its history. This cannot be undone."}
+            </p>
+
+            {/* Actions */}
+            <div className="flex gap-2.5 mt-4">
+              <button
+                onClick={confirmDeleteAll ? cancelDeleteAll : cancelDelete}
+                className="flex-1 px-3 py-2 text-[12px] font-medium rounded-lg bg-cc-hover text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteAll ? confirmDeleteAllArchived : confirmDelete}
+                className="flex-1 px-3 py-2 text-[12px] font-medium rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-colors cursor-pointer"
+              >
+                {confirmDeleteAll ? "Delete all" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

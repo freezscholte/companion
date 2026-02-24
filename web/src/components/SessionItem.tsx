@@ -130,7 +130,7 @@ export function SessionItem({
   }, []);
 
   return (
-    <div className={`relative group ${archived ? "opacity-50" : ""}`}>
+    <div className="relative group">
       <button
         onClick={() => onSelect(s.id)}
         onDoubleClick={(e) => {
