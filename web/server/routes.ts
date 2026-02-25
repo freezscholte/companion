@@ -187,8 +187,10 @@ export function createRoutes(
     try {
       const result = await runSessionCreationPipeline(body, reporter, pipelineDeps);
       if (!result) {
-        // Pipeline aborted — error was captured
-        return c.json({ error: errorResult!.message }, errorResult!.status as 400);
+        // Pipeline aborted — error was captured by reporter.error() callback
+        const errMsg = (errorResult as { message: string; status: number } | null)?.message || "Session creation failed";
+        const errStatus = (errorResult as { message: string; status: number } | null)?.status || 500;
+        return c.json({ error: errMsg }, errStatus as 400);
       }
       return c.json(result.session);
     } catch (e: unknown) {
