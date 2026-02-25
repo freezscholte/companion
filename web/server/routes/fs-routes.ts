@@ -3,6 +3,7 @@ import { readdir, readFile, stat, writeFile, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { Hono } from "hono";
+import { shellEscapeArg } from "../shell-utils.js";
 
 /** Ensure a resolved path is within one of the allowed base directories.
  *  Returns the resolved absolute path, or null if it escapes all bases. */
@@ -14,9 +15,6 @@ function guardPath(raw: string, allowedBases: string[]): string | null {
   return null;
 }
 
-function shellEscapeArg(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
-}
 
 function execCaptureStdout(
   command: string,
