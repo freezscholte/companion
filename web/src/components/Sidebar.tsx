@@ -6,6 +6,8 @@ import { navigateToSession, navigateHome, parseHash } from "../utils/routing.js"
 import { ProjectGroup } from "./ProjectGroup.js";
 import { SessionItem } from "./SessionItem.js";
 import { groupSessionsByProject, type SessionItem as SessionItemType } from "../utils/project-grouping.js";
+import { ConfirmDialog, DeleteIcon } from "./ConfirmDialog.js";
+import { CollapsibleSessionGroup } from "./CollapsibleSessionGroup.js";
 
 interface NavItem {
   id: string;
@@ -76,7 +78,7 @@ const NAV_ITEMS: NavItem[] = [
 export function Sidebar() {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
-  const [showArchived, setShowArchived] = useState(false);
+  // showArchived state is now managed inside CollapsibleSessionGroup
   const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
@@ -336,8 +338,7 @@ export function Sidebar() {
   const archivedSessions = allSessionList.filter((s) => s.archived);
   const currentSession = currentSessionId ? allSessionList.find((s) => s.id === currentSessionId) : null;
   const logoSrc = currentSession?.backendType === "codex" ? "/logo-codex.svg" : "/logo.svg";
-  const [showCronSessions, setShowCronSessions] = useState(true);
-  const [showAgentSessions, setShowAgentSessions] = useState(true);
+  // Collapsible group state is now managed inside CollapsibleSessionGroup
 
   // Group active sessions by project
   const projectGroups = useMemo(
@@ -445,82 +446,59 @@ export function Sidebar() {
             ))}
 
             {cronSessions.length > 0 && (
-              <div className="mt-2 pt-2">
-                <button
-                  onClick={() => setShowCronSessions(!showCronSessions)}
-                  className="w-full px-3 py-1.5 text-[11px] font-medium text-violet-400 uppercase tracking-wider flex items-center gap-1.5 hover:text-violet-300 transition-colors cursor-pointer"
-                >
-                  <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 transition-transform ${showCronSessions ? "rotate-90" : ""}`}>
-                    <path d="M6 4l4 4-4 4" />
-                  </svg>
+              <CollapsibleSessionGroup
+                label="Scheduled Runs"
+                count={cronSessions.length}
+                colorClass="text-violet-400"
+                hoverColorClass="hover:text-violet-300"
+                icon={
                   <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-60">
                     <path d="M8 2a6 6 0 100 12A6 6 0 008 2zM0 8a8 8 0 1116 0A8 8 0 010 8zm9-3a1 1 0 10-2 0v3a1 1 0 00.293.707l2 2a1 1 0 001.414-1.414L9 7.586V5z" />
                   </svg>
-                  Scheduled Runs ({cronSessions.length})
-                </button>
-                {showCronSessions && (
-                  <div className="space-y-0.5 mt-1">
-                    {cronSessions.map((s) => (
-                      <SessionItem
-                        key={s.id}
-                        session={s}
-                        isActive={currentSessionId === s.id}
-                        sessionName={sessionNames.get(s.id)}
-                        permCount={pendingPermissions.get(s.id)?.size ?? 0}
-                        isRecentlyRenamed={recentlyRenamed.has(s.id)}
-                        {...sessionItemProps}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
+                }
+                sessions={cronSessions}
+                className="mt-2 pt-2"
+                currentSessionId={currentSessionId}
+                sessionNames={sessionNames}
+                pendingPermissions={pendingPermissions}
+                recentlyRenamed={recentlyRenamed}
+                {...sessionItemProps}
+              />
             )}
 
             {agentSessions.length > 0 && (
-              <div className="mt-2 pt-2 border-t border-cc-border">
-                <button
-                  onClick={() => setShowAgentSessions(!showAgentSessions)}
-                  className="w-full px-3 py-1.5 text-[11px] font-medium text-emerald-400 uppercase tracking-wider flex items-center gap-1.5 hover:text-emerald-300 transition-colors cursor-pointer"
-                >
-                  <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 transition-transform ${showAgentSessions ? "rotate-90" : ""}`}>
-                    <path d="M6 4l4 4-4 4" />
-                  </svg>
+              <CollapsibleSessionGroup
+                label="Agent Runs"
+                count={agentSessions.length}
+                colorClass="text-emerald-400"
+                hoverColorClass="hover:text-emerald-300"
+                icon={
                   <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-60">
                     <path d="M8 1.5a2.5 2.5 0 00-2.5 2.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5S9.38 1.5 8 1.5zM4 8a4 4 0 00-4 4v1.5a.5.5 0 00.5.5h15a.5.5 0 00.5-.5V12a4 4 0 00-4-4H4z" />
                   </svg>
-                  Agent Runs ({agentSessions.length})
-                </button>
-                {showAgentSessions && (
-                  <div className="space-y-0.5 mt-1">
-                    {agentSessions.map((s) => (
-                      <SessionItem
-                        key={s.id}
-                        session={s}
-                        isActive={currentSessionId === s.id}
-                        sessionName={sessionNames.get(s.id)}
-                        permCount={pendingPermissions.get(s.id)?.size ?? 0}
-                        isRecentlyRenamed={recentlyRenamed.has(s.id)}
-                        {...sessionItemProps}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
+                }
+                sessions={agentSessions}
+                className="mt-2 pt-2 border-t border-cc-border"
+                currentSessionId={currentSessionId}
+                sessionNames={sessionNames}
+                pendingPermissions={pendingPermissions}
+                recentlyRenamed={recentlyRenamed}
+                {...sessionItemProps}
+              />
             )}
 
             {archivedSessions.length > 0 && (
-              <div className="mt-2 pt-2 border-t border-cc-border/50">
-                <div className="flex items-center">
-                  <button
-                    onClick={() => setShowArchived(!showArchived)}
-                    className="flex-1 px-3 py-1.5 text-[11px] font-medium text-cc-muted uppercase tracking-wider flex items-center gap-1.5 hover:text-cc-fg transition-colors cursor-pointer"
-                  >
-                    <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 transition-transform ${showArchived ? "rotate-90" : ""}`}>
-                      <path d="M6 4l4 4-4 4" />
-                    </svg>
-                    Archived ({archivedSessions.length})
-                  </button>
-                  {showArchived && archivedSessions.length > 1 && (
+              <CollapsibleSessionGroup
+                label="Archived"
+                count={archivedSessions.length}
+                colorClass="text-cc-muted"
+                hoverColorClass="hover:text-cc-fg"
+                sessions={archivedSessions}
+                defaultExpanded={false}
+                isArchived
+                className="mt-2 pt-2 border-t border-cc-border/50"
+                headerAction={
+                  archivedSessions.length > 1 ? (
                     <button
                       onClick={handleDeleteAllArchived}
                       className="px-2 py-1 mr-1 text-[10px] text-red-400 hover:text-red-500 hover:bg-red-500/10 rounded-md transition-colors cursor-pointer"
@@ -528,25 +506,14 @@ export function Sidebar() {
                     >
                       Delete all
                     </button>
-                  )}
-                </div>
-                {showArchived && (
-                  <div className="space-y-0.5 mt-1">
-                    {archivedSessions.map((s) => (
-                      <SessionItem
-                        key={s.id}
-                        session={s}
-                        isActive={currentSessionId === s.id}
-                        isArchived
-                        sessionName={sessionNames.get(s.id)}
-                        permCount={pendingPermissions.get(s.id)?.size ?? 0}
-                        isRecentlyRenamed={recentlyRenamed.has(s.id)}
-                        {...sessionItemProps}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
+                  ) : undefined
+                }
+                currentSessionId={currentSessionId}
+                sessionNames={sessionNames}
+                pendingPermissions={pendingPermissions}
+                recentlyRenamed={recentlyRenamed}
+                {...sessionItemProps}
+              />
             )}
           </>
         )}
@@ -605,51 +572,18 @@ export function Sidebar() {
 
       {/* Delete confirmation modal */}
       {(confirmDeleteId || confirmDeleteAll) && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-[fadeIn_150ms_ease-out]"
-          onClick={confirmDeleteAll ? cancelDeleteAll : cancelDelete}
-        >
-          <div
-            className="mx-4 w-full max-w-[280px] bg-cc-card border border-cc-border rounded-xl shadow-2xl p-5 animate-[menu-appear_150ms_ease-out]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Icon */}
-            <div className="flex justify-center mb-3">
-              <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-5 h-5 text-red-400">
-                  <path d="M5.5 5.5A.5.5 0 016 6v6a.5.5 0 01-1 0V6a.5.5 0 01.5-.5zm2.5 0a.5.5 0 01.5.5v6a.5.5 0 01-1 0V6a.5.5 0 01.5-.5zm3 .5a.5.5 0 00-1 0v6a.5.5 0 001 0V6z" />
-                  <path fillRule="evenodd" d="M14.5 3a1 1 0 01-1 1H13v9a2 2 0 01-2 2H5a2 2 0 01-2-2V4h-.5a1 1 0 010-2H6a1 1 0 011-1h2a1 1 0 011 1h3.5a1 1 0 011 1zM4.118 4L4 4.059V13a1 1 0 001 1h6a1 1 0 001-1V4.059L11.882 4H4.118zM6 2h4v1H6V2z" clipRule="evenodd" />
-                </svg>
-              </div>
-            </div>
-
-            {/* Text */}
-            <h3 className="text-[13px] font-semibold text-cc-fg text-center">
-              {confirmDeleteAll ? "Delete all archived?" : "Delete session?"}
-            </h3>
-            <p className="text-[12px] text-cc-muted text-center mt-1.5 leading-relaxed">
-              {confirmDeleteAll
-                ? `This will permanently delete ${archivedSessions.length} archived session${archivedSessions.length === 1 ? "" : "s"}. This cannot be undone.`
-                : "This will permanently delete this session and its history. This cannot be undone."}
-            </p>
-
-            {/* Actions */}
-            <div className="flex gap-2.5 mt-4">
-              <button
-                onClick={confirmDeleteAll ? cancelDeleteAll : cancelDelete}
-                className="flex-1 px-3 py-2 text-[12px] font-medium rounded-lg bg-cc-hover text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDeleteAll ? confirmDeleteAllArchived : confirmDelete}
-                className="flex-1 px-3 py-2 text-[12px] font-medium rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-colors cursor-pointer"
-              >
-                {confirmDeleteAll ? "Delete all" : "Delete"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title={confirmDeleteAll ? "Delete all archived?" : "Delete session?"}
+          description={
+            confirmDeleteAll
+              ? `This will permanently delete ${archivedSessions.length} archived session${archivedSessions.length === 1 ? "" : "s"}. This cannot be undone.`
+              : "This will permanently delete this session and its history. This cannot be undone."
+          }
+          confirmLabel={confirmDeleteAll ? "Delete all" : "Delete"}
+          onCancel={confirmDeleteAll ? cancelDeleteAll : cancelDelete}
+          onConfirm={confirmDeleteAll ? confirmDeleteAllArchived : confirmDelete}
+          icon={<DeleteIcon />}
+        />
       )}
     </aside>
   );
